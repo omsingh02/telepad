@@ -59,6 +59,14 @@ class WindowsInputController(InputController):
         elif action == 'prev': self.key(0xB1)
 
 
+def run_as_user(cmd_lines, timeout=2, return_output=False):
+    sudo_user = os.environ.get('SUDO_USER')
+    cmd = ['sudo', '-u', sudo_user, '-E'] + cmd_lines if sudo_user else cmd_lines
+    try:
+        if return_output: return subprocess.check_output(cmd, timeout=timeout, stderr=subprocess.DEVNULL).decode('utf-8')
+        else: subprocess.run(cmd, timeout=timeout, stderr=subprocess.DEVNULL)
+    except Exception: return ""
+
 class LinuxInputController(InputController):
     def __init__(self):
         try:
@@ -131,12 +139,7 @@ class LinuxInputController(InputController):
         self.ui.syn()
 
     def txt(self, s):
-        try:
-            # Safely delegate typing to Wayland typing tools for high complex unicode/emojis 
-            # Note: Do not pass directly to shell to avoid injections
-            subprocess.run(['wtype', s], timeout=2, stderr=subprocess.DEVNULL)
-        except Exception as e:
-            print(f"wtype error (is it installed?): {e}")
+        run_as_user(['wtype', s])
                 
     def lock(self): os.system("loginctl lock-session")
     
@@ -196,22 +199,21 @@ def get_html():
 
 def get_media_status():
     if sys.platform == "win32": return b"[]"
-    try:
-        res = subprocess.check_output(['playerctl', '-a', 'metadata', '--format', '{{playerName}}|{{status}}|{{artist}}|{{title}}'], timeout=1, stderr=subprocess.DEVNULL).decode('utf-8')
-        streams = []
-        for line in res.strip().split('\n'):
-            if not line: continue
-            parts = line.split('|', 3)
-            if len(parts) == 4:
-                streams.append({
-                    "id": parts[0], 
-                    "status": parts[1], 
-                    "artist": parts[2].strip() or "Unknown Artist", 
-                    "title": parts[3].strip() or parts[0].capitalize()
-                })
-        return json.dumps(streams).encode('utf-8')
-    except Exception:
-        return b"[]"
+    res = run_as_user(['playerctl', '-a', 'metadata', '--format', '{{playerName}}|{{status}}|{{artist}}|{{title}}'], return_output=True)
+    if not res: return b"[]"
+    
+    streams = []
+    for line in res.strip().split('\n'):
+        if not line: continue
+        parts = line.split('|', 3)
+        if len(parts) == 4:
+            streams.append({
+                "id": parts[0], 
+                "status": parts[1], 
+                "artist": parts[2].strip() or "Unknown Artist", 
+                "title": parts[3].strip() or parts[0].capitalize()
+            })
+    return json.dumps(streams).encode('utf-8')
 
 def handle(conn, addr):
     conn.settimeout(60)
@@ -247,8 +249,7 @@ def handle(conn, addr):
                     elif p[1] in ('play', 'next', 'prev'):
                         if len(p) >= 3 and p[2]:  # Targeted playerctl action
                             action = 'play-pause' if p[1] == 'play' else p[1]
-                            try: subprocess.run(['playerctl', '-p', p[2], action], timeout=1, stderr=subprocess.DEVNULL)
-                            except: pass
+                            run_as_user(['playerctl', '-p', p[2], action], timeout=1)
                         else: # Global action
                             ctrl.media(p[1])
                 elif t == 'key' and len(p) >= 2:
