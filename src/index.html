@@ -198,16 +198,18 @@ document.getElementById('alt').onclick=()=>{alt=1-alt;document.getElementById('a
 document.getElementById('shift').onclick=()=>{shift=1-shift;document.getElementById('shift').classList.toggle('on')};
 document.getElementById('win').onclick=()=>{win=1-win;document.getElementById('win').classList.toggle('on')};
 
+let ign=0;
 const inp=document.getElementById('inp');
 inp.onkeydown=e=>{
   const k=e.keyCode||e.which;
-  if(ctrl||alt||win||(shift&&e.key.length>1)){sk(k);e.preventDefault();return}
-  if(e.key.length===1){s('type|'+e.key);e.preventDefault()}
-  else{sk(k);e.preventDefault()}
+  if(ctrl||alt||win||(shift&&e.key?.length>1)){sk(k);e.preventDefault();ign=1;setTimeout(()=>ign=0,50);return}
+  if(e.key?.length===1){s('type|'+e.key);e.preventDefault();ign=1;setTimeout(()=>ign=0,50)}
+  else{sk(k);e.preventDefault();ign=1;setTimeout(()=>ign=0,50)}
 };
 inp.oninput=e=>{
-  if(e.data&&!ctrl&&!alt&&!win){s('type|'+e.data)}
+  if(!ign && e.data && !ctrl && !alt && !win){s('type|'+e.data)}
   inp.value='';
+  ign=0;
 };
 
 // Media Polling

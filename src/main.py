@@ -98,6 +98,8 @@ class LinuxInputController(InputController):
             sys.exit(1)
             
         self.vk_map = {9: ecodes.KEY_TAB, 27: ecodes.KEY_ESC, 13: ecodes.KEY_ENTER, 8: ecodes.KEY_BACKSPACE, 32: ecodes.KEY_SPACE, 37: ecodes.KEY_LEFT, 38: ecodes.KEY_UP, 39: ecodes.KEY_RIGHT, 40: ecodes.KEY_DOWN, 91: ecodes.KEY_LEFTMETA}
+        for i in range(26): self.vk_map[65 + i] = getattr(ecodes, f"KEY_{chr(65 + i)}")
+        for i in range(10): self.vk_map[48 + i] = getattr(ecodes, f"KEY_{i}")
 
     def _send_key(self, key_ecode, hold=False):
         self.ui.write(self.ecodes.EV_KEY, key_ecode, 1) # Down
