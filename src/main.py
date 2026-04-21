@@ -1,4 +1,4 @@
-import socket, struct, hashlib, base64, threading, sys, os
+import socket, struct, hashlib, base64, threading, sys, os, subprocess, json
 
 PORT = 5000
 SENS, SCROLL = 1.6, 2.2
@@ -51,7 +51,7 @@ class WindowsInputController(InputController):
     def lock(self): self.u32.LockWorkStation()
     def volume(self, direction):
         if direction == 'mute': self.key(0xAD)
-        elif direction == 'down': self.key(0xAE)
+        elif direction == 'dn': self.key(0xAE)
         elif direction == 'up': self.key(0xAF)
     def media(self, action):
         if action == 'play': self.key(0xB3)
@@ -67,7 +67,6 @@ class LinuxInputController(InputController):
             from evdev import ecodes
             self.ecodes = ecodes
             
-            # Create a virtual unified device handling keys & mouse
             caps = {
                 ecodes.EV_KEY: [
                     ecodes.KEY_A, ecodes.KEY_B, ecodes.KEY_C, ecodes.KEY_D, ecodes.KEY_E, ecodes.KEY_F, ecodes.KEY_G, ecodes.KEY_H, ecodes.KEY_I, ecodes.KEY_J, ecodes.KEY_K, ecodes.KEY_L, ecodes.KEY_M, ecodes.KEY_N, ecodes.KEY_O, ecodes.KEY_P, ecodes.KEY_Q, ecodes.KEY_R, ecodes.KEY_S, ecodes.KEY_T, ecodes.KEY_U, ecodes.KEY_V, ecodes.KEY_W, ecodes.KEY_X, ecodes.KEY_Y, ecodes.KEY_Z,
@@ -90,7 +89,7 @@ class LinuxInputController(InputController):
             print("Error: 'evdev' module is required on Linux. Install via 'pip install evdev' or 'sudo pacman -S python-evdev'.")
             sys.exit(1)
             
-        self.vk_map = {9: ecodes.KEY_TAB, 27: ecodes.KEY_ESC, 13: ecodes.KEY_ENTER, 8: ecodes.KEY_BACKSPACE, 32: ecodes.KEY_SPACE, 37: ecodes.KEY_LEFT, 38: ecodes.KEY_UP, 39: ecodes.KEY_RIGHT, 40: ecodes.KEY_DOWN}
+        self.vk_map = {9: ecodes.KEY_TAB, 27: ecodes.KEY_ESC, 13: ecodes.KEY_ENTER, 8: ecodes.KEY_BACKSPACE, 32: ecodes.KEY_SPACE, 37: ecodes.KEY_LEFT, 38: ecodes.KEY_UP, 39: ecodes.KEY_RIGHT, 40: ecodes.KEY_DOWN, 91: ecodes.KEY_LEFTMETA}
 
     def _send_key(self, key_ecode, hold=False):
         self.ui.write(self.ecodes.EV_KEY, key_ecode, 1) # Down
@@ -132,21 +131,20 @@ class LinuxInputController(InputController):
         self.ui.syn()
 
     def txt(self, s):
-        e = self.ecodes
-        for char in s:
-            shift = char.isupper()
-            c = char.lower()
-            if shift: self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1); self.ui.syn()
-            if 'a' <= c <= 'z': self._send_key(getattr(e, f"KEY_{c.upper()}"))
-            elif '0' <= c <= '9': self._send_key(getattr(e, f"KEY_{c}"))
-            elif c == ' ': self._send_key(e.KEY_SPACE)
-            if shift: self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0); self.ui.syn()
+        try:
+            # Safely delegate typing to Wayland typing tools for high complex unicode/emojis 
+            # Note: Do not pass directly to shell to avoid injections
+            subprocess.run(['wtype', s], timeout=2)
+        except Exception as e:
+            print(f"wtype error (is it installed?): {e}")
                 
     def lock(self): os.system("loginctl lock-session")
+    
     def volume(self, direction):
         if direction == 'mute': self._send_key(self.ecodes.KEY_MUTE)
-        elif direction == 'down': self._send_key(self.ecodes.KEY_VOLUMEDOWN)
+        elif direction == 'dn': self._send_key(self.ecodes.KEY_VOLUMEDOWN)
         elif direction == 'up': self._send_key(self.ecodes.KEY_VOLUMEUP)
+        
     def media(self, action):
         if action == 'play': self._send_key(self.ecodes.KEY_PLAYPAUSE)
         elif action == 'next': self._send_key(self.ecodes.KEY_NEXTSONG)
@@ -196,6 +194,25 @@ def get_html():
             return f.read()
     return b"<html><body>Error: index.html not found</body></html>"
 
+def get_media_status():
+    if sys.platform == "win32": return b"[]"
+    try:
+        res = subprocess.check_output(['playerctl', '-a', 'metadata', '--format', '{{playerName}}|{{status}}|{{artist}}|{{title}}'], timeout=1).decode('utf-8')
+        streams = []
+        for line in res.strip().split('\n'):
+            if not line: continue
+            parts = line.split('|', 3)
+            if len(parts) == 4:
+                streams.append({
+                    "id": parts[0], 
+                    "status": parts[1], 
+                    "artist": parts[2].strip() or "Unknown Artist", 
+                    "title": parts[3].strip() or parts[0].capitalize()
+                })
+        return json.dumps(streams).encode('utf-8')
+    except Exception:
+        return b"[]"
+
 def handle(conn, addr):
     conn.settimeout(60)
     try:
@@ -227,10 +244,21 @@ def handle(conn, addr):
                 elif t == 'cmd' and len(p) >= 2:
                     if p[1] == 'lock': ctrl.lock()
                     elif p[1] in ('mute', 'voldn', 'volup'): ctrl.volume(p[1].replace('vol', ''))
-                    elif p[1] in ('play', 'next', 'prev'): ctrl.media(p[1])
+                    elif p[1] in ('play', 'next', 'prev'):
+                        if len(p) >= 3 and p[2]:  # Targeted playerctl action
+                            action = 'play-pause' if p[1] == 'play' else p[1]
+                            try: subprocess.run(['playerctl', '-p', p[2], action], timeout=1)
+                            except: pass
+                        else: # Global action
+                            ctrl.media(p[1])
                 elif t == 'key' and len(p) >= 2:
                     try:
                         vk = int(p[1])
+                        # If a naked push of 91, don't demand combos
+                        if vk == 91 and len(p) == 2:
+                            ctrl.key(vk)
+                            continue
+                            
                         ctrl_mod = int(p[2]) if len(p) > 2 else 0
                         shift_mod = int(p[3]) if len(p) > 3 else 0
                         alt_mod = int(p[4]) if len(p) > 4 else 0
@@ -239,8 +267,12 @@ def handle(conn, addr):
                     except: pass
                 elif t == 'type' and len(p) >= 2: ctrl.txt(p[1])
         else:
-            html = get_html()
-            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nCache-Control: no-cache\r\n\r\n" + html)
+            if req.startswith('GET /media HTTP'):
+                payload = get_media_status()
+                conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-cache\r\nAccess-Control-Allow-Origin: *\r\n\r\n" + payload)
+            else:
+                html = get_html()
+                conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nCache-Control: no-cache\r\n\r\n" + html)
     except (socket.timeout, ConnectionResetError, BrokenPipeError, OSError):
         pass
     finally:

@@ -2,15 +2,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0">
 <title>Telepad</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  body { background:#0f172a; color:#f8fafc; font-family:'Inter', system-ui, sans-serif; overflow:hidden; touch-action:manipulation; user-select:none; height:100vh; height:100dvh; }
+  body { background:#0f172a; color:#f8fafc; font-family:'Inter', system-ui, sans-serif; overflow:hidden; touch-action:manipulation; user-select:none; height:100vh; height:100dvh; display:flex; flex-direction:column; }
   
-  .tabs { display:flex; height:56px; background:#1e293b; border-bottom:1px solid #334155; padding: 0 8px; }
+  .tabs { display:flex; height:56px; min-height:56px; background:#1e293b; border-bottom:1px solid #334155; padding: 0 8px; }
   .tab { flex:1; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#94a3b8; font-weight:500; font-size:14px; transition:color 0.15s; border-bottom: 2px solid transparent; }
   .tab.a { color:#38bdf8; border-bottom-color:#38bdf8; }
   
-  .p { display:none; height:calc(100vh - 56px); height:calc(100dvh - 56px); }
+  .p { display:none; flex:1; overflow:hidden; }
   .p.a { display:flex; flex-direction:column; }
   
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:20px; overflow-y:auto; }
@@ -19,6 +19,18 @@
   .btn svg { stroke:#94a3b8; }
   .btn.accent-red svg { stroke:#f87171; }
   .btn.accent-blue svg { stroke:#38bdf8; }
+  
+  /* Media Section */
+  .media-wrapper { padding: 0 20px 20px 20px; display:flex; flex-direction:column; gap:12px; overflow-y:auto; }
+  .media-card { background:#1e293b; border:1px solid #334155; padding:16px; border-radius:16px; display:flex; flex-direction:column; gap:12px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); }
+  .mc-header { display:flex; justify-content:space-between; align-items:center; }
+  .mc-title { font-weight:600; font-size:15px; text-overflow:ellipsis; white-space:nowrap; overflow:hidden; }
+  .mc-artist { font-size:12px; color:#94a3b8; text-overflow:ellipsis; white-space:nowrap; overflow:hidden; margin-top:2px; }
+  .mc-status { font-size:11px; padding:2px 8px; border-radius:12px; background:#334155; font-weight:600; color:#f8fafc; }
+  .mc-status.playing { background:#10b981; color:#064e3b; }
+  .mc-controls { display:flex; justify-content:center; gap:20px; margin-top:4px; }
+  .mc-btn { background:#0f172a; border:none; color:#f8fafc; width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:transform 0.1s; }
+  .mc-btn:active { transform:scale(0.92); background:#334155; }
   
   /* Trackpad Specifics */
   #pad-container { flex:1; padding:20px; display:flex; flex-direction:column; }
@@ -42,8 +54,9 @@
   input:focus { outline:none; border-color:#38bdf8; }
   .info { color:#64748b; font-size:12px; text-align:center; padding-top:16px; line-height:1.5; margin-top:auto; }
 
-  /* Minimal horizontal layout for smaller row buttons */
   .grid-horizontal .btn { flex-direction:row; justify-content:center; padding:16px; }
+  
+  .section-title { font-size:14px; font-weight:600; color:#94a3b8; margin: 24px 20px 0 20px; text-transform:uppercase; letter-spacing:1px; }
 </style>
 </head><body>
 
@@ -57,38 +70,37 @@
 </div>
 
 <!-- Controls Panel -->
-<div class="p"><div class="grid">
-  <div class="btn accent-red" onclick="c('lock')">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0110 0v4"></path></svg>
-    Lock PC
+<div class="p"><div style="display:flex; flex-direction:column; height:100%;">
+  <div class="grid">
+    <div class="btn accent-red" onclick="c('lock')">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0110 0v4"></path></svg>
+      Lock PC
+    </div>
+    <div class="btn" onclick="c('mute')">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+      Mute
+    </div>
+    <div class="btn" onclick="c('voldn')">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="15" y1="9" x2="15" y2="15"></line></svg>
+      Vol Down
+    </div>
+    <div class="btn" onclick="c('volup')">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"></path></svg>
+      Vol Up
+    </div>
+    <div class="btn" onclick="sk(91)" style="flex-direction:row; justify-content:center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+      Super
+    </div>
+    <div class="btn" onclick="sk(32)" style="flex-direction:row; justify-content:center;">
+      Space
+    </div>
   </div>
-  <div class="btn" onclick="c('mute')">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
-    Mute
-  </div>
-  <div class="btn" onclick="c('voldn')">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="15" y1="9" x2="15" y2="15"></line></svg>
-    Vol Down
-  </div>
-  <div class="btn" onclick="c('volup')">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"></path></svg>
-    Vol Up
-  </div>
-  <div class="btn accent-blue" onclick="c('prev')">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
-    Prev
-  </div>
-  <div class="btn accent-blue" onclick="c('play')">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-    Play/Pause
-  </div>
-  <div class="btn accent-blue" onclick="c('next')">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
-    Next
-  </div>
-  <div class="btn" onclick="sk(32)" style="flex-direction:row; justify-content:center;">
-    Space
-  </div>
+  
+  <!-- Dynamic Media Players -->
+  <div class="section-title" id="media-title" style="display:none;">Active Streams</div>
+  <div class="media-wrapper" id="media-list"></div>
+
 </div></div>
 
 <!-- Trackpad Panel -->
@@ -104,6 +116,7 @@
     <div class="mod" id="ctrl">CTRL</div>
     <div class="mod" id="alt">ALT</div>
     <div class="mod" id="shift">SHIFT</div>
+    <!-- The win modifier acts as a hold, Super above acts as a single tap-->
     <div class="mod" id="win">WIN</div>
   </div>
   
@@ -123,7 +136,7 @@
   
   <input id="inp" type="text" placeholder="Tap here to type naturally..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
   
-  <div class="info">Input is sent instantly. Toggle modifiers above before pressing keys or typing letters.</div>
+  <div class="info">Input is sent instantly. Toggle modifiers above before pressing keys or typing letters. Special characters and emojis are native!</div>
 </div></div>
 
 <script>
@@ -144,7 +157,6 @@ function sw(i){
   document.querySelectorAll('.p').forEach((p,x)=>p.classList.toggle('a',x===i))
 }
 
-// Trackpad logic (NO bloat, zero-dependency Javascript)
 const pad=document.getElementById('pad');
 let lx=0,ly=0,ax=0,ay=0,as=0,mf=0,ts=0,tm=0,ct=null,dr=0;
 setInterval(()=>{
@@ -177,7 +189,6 @@ pad.ontouchend=e=>{
   }
 };
 
-// Keyboard logic
 let ctrl=0,alt=0,shift=0,win=0;
 function clrMods(){ctrl=alt=shift=win=0;document.querySelectorAll('.mod').forEach(x=>x.classList.remove('on'))}
 function sk(vk){s(`key|${vk}|${ctrl}|${shift}|${alt}|${win}`);clrMods()}
@@ -198,4 +209,52 @@ inp.oninput=e=>{
   if(e.data&&!ctrl&&!alt&&!win){s('type|'+e.data)}
   inp.value='';
 };
+
+// Media Polling
+const mediaList = document.getElementById('media-list');
+const mediaTitle = document.getElementById('media-title');
+
+const svgs = {
+  prev: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>',
+  play: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>',
+  pause: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>',
+  next: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>'
+};
+
+async function fetchMedia() {
+  if (ws?.readyState !== 1) return;
+  try {
+    const res = await fetch('/media');
+    const data = await res.json();
+    
+    if (data.length > 0) {
+      mediaTitle.style.display = 'block';
+      mediaList.innerHTML = data.map(p => `
+        <div class="media-card">
+          <div class="mc-header">
+            <div style="flex:1; min-width:0;">
+              <div class="mc-title" title="${p.title}">${p.title}</div>
+              <div class="mc-artist" title="${p.artist}">${p.artist} · ${p.id.split('.')[0]}</div>
+            </div>
+            <div class="mc-status ${p.status.toLowerCase()}">${p.status}</div>
+          </div>
+          <div class="mc-controls">
+            <button class="mc-btn" onclick="c('prev|${p.id}')">${svgs.prev}</button>
+            <button class="mc-btn" onclick="c('play|${p.id}')">${p.status === 'Playing' ? svgs.pause : svgs.play}</button>
+            <button class="mc-btn" onclick="c('next|${p.id}')">${svgs.next}</button>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      mediaTitle.style.display = 'none';
+      mediaList.innerHTML = '';
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+setInterval(fetchMedia, 2000);
+fetchMedia();
+
 </script></body></html>
