@@ -249,14 +249,27 @@ async function fetchMedia(){
             <div class="mc-status ${p.status.toLowerCase()}">${p.status}</div>
           </div>
           <div class="mc-controls">
-            <button class="mc-btn" onclick="c('prev|${p.id}')">${svgs.prev}</button>
-            <button class="mc-btn" style="background:#1e293b" onclick="c('play|${p.id}')">${p.status==='Playing'?svgs.pause:svgs.play}</button>
-            <button class="mc-btn" onclick="c('next|${p.id}')">${svgs.next}</button>
+            <button class="mc-btn" onclick="mc('prev','${p.id}',this)">${svgs.prev}</button>
+            <button class="mc-btn" style="background:#1e293b" onclick="mc('play','${p.id}',this)">${p.status==='Playing'?svgs.pause:svgs.play}</button>
+            <button class="mc-btn" onclick="mc('next','${p.id}',this)">${svgs.next}</button>
           </div>
         </div>
       `).join('');
     } else { mediaTitle.style.display='none'; mediaList.innerHTML=''; }
   }catch(e){}
 }
-setInterval(fetchMedia,2500);
+function mc(action, id, btn) {
+  c(`${action}|${id}`);
+  if (action === 'play') {
+    const statusEl = btn.closest('.media-card').querySelector('.mc-status');
+    const isPlaying = statusEl.classList.contains('playing');
+    statusEl.classList.toggle('playing', !isPlaying);
+    statusEl.innerText = isPlaying ? 'Paused' : 'Playing';
+    btn.innerHTML = isPlaying ? svgs.play : svgs.pause;
+  }
+  setTimeout(fetchMedia, 300);
+}
+
+setInterval(fetchMedia, 2000);
+fetchMedia();
 </script></body></html>
