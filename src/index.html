@@ -202,12 +202,19 @@ let ign=0;
 const inp=document.getElementById('inp');
 inp.onkeydown=e=>{
   const k=e.keyCode||e.which;
+  if(k===229) return; // Ignore mobile virtual kb composition, defer to oninput
   if(ctrl||alt||win||(shift&&e.key?.length>1)){sk(k);e.preventDefault();ign=1;setTimeout(()=>ign=0,50);return}
   if(e.key?.length===1){s('type|'+e.key);e.preventDefault();ign=1;setTimeout(()=>ign=0,50)}
   else{sk(k);e.preventDefault();ign=1;setTimeout(()=>ign=0,50)}
 };
 inp.oninput=e=>{
-  if(!ign && e.data && !ctrl && !alt && !win){s('type|'+e.data)}
+  if(!e.data) { inp.value=''; return; }
+  if(ctrl||alt||win){
+    let c = e.data.substring(e.data.length - 1);
+    sk(c.toUpperCase().charCodeAt(0));
+  } else if(!ign) {
+    s('type|'+e.data);
+  }
   inp.value='';
   ign=0;
 };
