@@ -1,0 +1,103 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0">
+<title>Remote</title><style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0a0a0a;color:#0f0;font:14px system-ui,sans-serif;overflow:hidden;touch-action:manipulation;user-select:none;height:100vh;height:100dvh}
+.tabs{display:flex;height:48px;border-bottom:1px solid #222;background:#111}
+.tab{flex:1;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s}
+.tab.a{color:#0f0;border-bottom:2px solid #0f0}.tab:active{background:#1a1a1a}
+.p{display:none;height:calc(100vh - 48px);height:calc(100dvh - 48px)}.p.a{display:flex;flex-direction:column}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;overflow-y:auto}
+.btn{background:#151515;border:1px solid #2a2a2a;padding:18px 12px;text-align:center;border-radius:8px;font-weight:500;transition:all .1s}
+.btn:active{background:#222;transform:scale(.97)}
+#pad{flex:1;background:#080808;touch-action:none;position:relative}
+#pad::after{content:'Tap: click | 2-finger tap: right-click | Drag: move | 2-finger drag: scroll';position:absolute;bottom:12px;left:0;right:0;text-align:center;color:#333;font-size:11px;pointer-events:none}
+#status{position:fixed;top:56px;right:8px;width:10px;height:10px;border-radius:50%;background:#f00;z-index:99;transition:background .3s}
+#status.ok{background:#0f0}
+#fs{position:fixed;top:54px;left:8px;padding:6px 10px;background:#151515;border:1px solid #2a2a2a;border-radius:6px;z-index:99;font-size:12px}
+#kb{padding:16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px}
+.mods{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.mod{background:#151515;border:1px solid #2a2a2a;padding:14px 8px;text-align:center;border-radius:8px;font-size:13px;transition:all .15s}
+.mod.on{background:#0f0;color:#000;border-color:#0f0}
+input{width:100%;padding:14px;background:#151515;border:1px solid #2a2a2a;color:#0f0;font:16px system-ui;border-radius:8px}
+input:focus{outline:none;border-color:#0f0}
+.info{color:#444;font-size:11px;text-align:center;margin-top:auto;padding-top:12px}
+</style></head><body>
+<div id="status"></div>
+<div id="fs" onclick="document.documentElement.requestFullscreen?.()">&#x26F6;</div>
+<div class="tabs">
+<div class="tab" onclick="sw(0)">BTNS</div>
+<div class="tab a" onclick="sw(1)">PAD</div>
+<div class="tab" onclick="sw(2)">KBD</div>
+</div>
+<div class="p"><div class="grid">
+<div class="btn" onclick="c('lock')" style="color:#f55;border-color:#f55">&#x1F512; LOCK</div>
+<div class="btn" onclick="c('mute')">&#x1F507; MUTE</div>
+<div class="btn" onclick="c('voldn')">&#x1F509; VOL-</div>
+<div class="btn" onclick="c('volup')">&#x1F50A; VOL+</div>
+<div class="btn" onclick="c('prev')" style="color:#0af;border-color:#0af">&#x23EE; PREV</div>
+<div class="btn" onclick="c('play')" style="color:#0af;border-color:#0af">&#x23EF; PLAY</div>
+<div class="btn" onclick="c('next')" style="color:#0af;border-color:#0af">&#x23ED; NEXT</div>
+<div class="btn" onclick="sk(32)">SPACE</div>
+</div></div>
+<div class="p a"><div id="pad"></div></div>
+<div class="p"><div id="kb">
+<div class="mods">
+<div class="mod" id="ctrl">CTRL</div>
+<div class="mod" id="alt">ALT</div>
+<div class="mod" id="shift">SHIFT</div>
+<div class="mod" id="win">WIN</div>
+</div>
+<div class="mods">
+<div class="btn" onclick="sk(9)">TAB</div>
+<div class="btn" onclick="sk(27)">ESC</div>
+<div class="btn" onclick="sk(13)">RET</div>
+<div class="btn" onclick="sk(8)">&#x232B;</div>
+</div>
+<div class="mods">
+<div class="btn" onclick="sk(37)">&larr;</div>
+<div class="btn" onclick="sk(38)">&uarr;</div>
+<div class="btn" onclick="sk(40)">&darr;</div>
+<div class="btn" onclick="sk(39)">&rarr;</div>
+</div>
+<input id="inp" type="text" placeholder="Tap here, then type on phone keyboard" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+<div class="info">Toggle modifiers, then press keys. Arrow keys &amp; common shortcuts above.</div>
+</div></div>
+<script>
+const st=document.getElementById('status');
+let ws,rt=0;
+function connect(){
+ws=new WebSocket('ws://'+location.host);
+ws.onopen=()=>{st.classList.add('ok');rt=0};
+ws.onclose=()=>{st.classList.remove('ok');setTimeout(connect,Math.min(1000*2**rt++,30000))};
+ws.onerror=()=>ws.close();
+}
+connect();
+function s(m){if(ws?.readyState===1)ws.send(m)}
+function c(x){s('cmd|'+x)}
+function sw(i){document.querySelectorAll('.tab').forEach((t,x)=>t.classList.toggle('a',x===i));document.querySelectorAll('.p').forEach((p,x)=>p.classList.toggle('a',x===i))}
+const pad=document.getElementById('pad');
+let lx=0,ly=0,ax=0,ay=0,as=0,mf=0,ts=0,tm=0,ct=null,dr=0;
+setInterval(()=>{if(ax||ay){s(`mv|${ax.toFixed(1)}|${ay.toFixed(1)}`);ax=ay=0}if(as){s(`sc|${as.toFixed(1)}`);as=0}},16);
+pad.ontouchstart=e=>{e.preventDefault();const f=e.touches.length;mf=Math.max(mf,f);lx=e.touches[0].clientX;ly=e.touches[0].clientY;
+if(f===1&&mf===1){if(ct){clearTimeout(ct);ct=null;dr=1;s('md|1')}ts=Date.now();tm=0}else{tm=0}};
+pad.ontouchmove=e=>{e.preventDefault();const cx=e.touches[0].clientX,cy=e.touches[0].clientY,dx=cx-lx,dy=cy-ly;tm+=Math.abs(dx)+Math.abs(dy);
+if(mf===1){ax+=dx;ay+=dy}else if(mf>=2&&tm>3){as+=dy}lx=cx;ly=cy};
+pad.ontouchend=e=>{e.preventDefault();const d=Date.now()-ts;
+if(dr){s('mu|1');dr=0;mf=0;return}
+if(!e.touches.length){if(mf===1&&tm<12&&d<250){ct=setTimeout(()=>{s('cl');ct=null},150)}else if(mf>=2&&tm<15&&d<350){s('rc')}mf=0}};
+let ctrl=0,alt=0,shift=0,win=0;
+function clrMods(){ctrl=alt=shift=win=0;document.querySelectorAll('.mod').forEach(x=>x.classList.remove('on'))}
+function sk(vk){s(`key|${vk}|${ctrl}|${shift}|${alt}|${win}`);clrMods()}
+document.getElementById('ctrl').onclick=()=>{ctrl=1-ctrl;document.getElementById('ctrl').classList.toggle('on')};
+document.getElementById('alt').onclick=()=>{alt=1-alt;document.getElementById('alt').classList.toggle('on')};
+document.getElementById('shift').onclick=()=>{shift=1-shift;document.getElementById('shift').classList.toggle('on')};
+document.getElementById('win').onclick=()=>{win=1-win;document.getElementById('win').classList.toggle('on')};
+const inp=document.getElementById('inp');
+inp.onkeydown=e=>{
+const k=e.keyCode||e.which;
+if(ctrl||alt||win||(shift&&e.key.length>1)){sk(k);e.preventDefault();return}
+if(e.key.length===1){s('type|'+e.key);e.preventDefault()}
+else{sk(k);e.preventDefault()}
+};
+inp.oninput=e=>{if(e.data&&!ctrl&&!alt&&!win){s('type|'+e.data)}inp.value=''};
+</script></body></html>
