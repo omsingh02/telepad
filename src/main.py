@@ -60,10 +60,22 @@ class WindowsInputController(InputController):
 
 def run_as_user(cmd_lines, timeout=2, return_output=False):
     sudo_user = os.environ.get('SUDO_USER')
-    cmd = ['sudo', '-u', sudo_user, '-E'] + cmd_lines if sudo_user else cmd_lines
+    env = os.environ.copy()
+    if sudo_user:
+        # Ensure DBUS session bus is discoverable — sudo -E may not carry it
+        try:
+            import pwd
+            uid = pwd.getpwnam(sudo_user).pw_uid
+            dbus_addr = f"unix:path=/run/user/{uid}/bus"
+            env['DBUS_SESSION_BUS_ADDRESS'] = dbus_addr
+            env['XDG_RUNTIME_DIR'] = f"/run/user/{uid}"
+        except Exception: pass
+        cmd = ['sudo', '-u', sudo_user, '-E'] + cmd_lines
+    else:
+        cmd = cmd_lines
     try:
-        if return_output: return subprocess.check_output(cmd, timeout=timeout, stderr=subprocess.DEVNULL).decode('utf-8')
-        else: subprocess.run(cmd, timeout=timeout, stderr=subprocess.DEVNULL)
+        if return_output: return subprocess.check_output(cmd, timeout=timeout, stderr=subprocess.DEVNULL, env=env).decode('utf-8')
+        else: subprocess.run(cmd, timeout=timeout, stderr=subprocess.DEVNULL, env=env)
     except Exception: return ""
 
 class LinuxInputController(InputController):
