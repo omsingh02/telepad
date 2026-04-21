@@ -153,7 +153,7 @@ const st=document.getElementById('status'), stTxt=document.getElementById('st-te
 let ws,rt=0,ctrl=0,shift=0,alt=0,win=0,timer=null;
 
 function connect(){
-  ws=new WebSocket('ws://'+location.host);
+  ws=new WebSocket('ws://'+location.host+location.search);
   ws.onopen=()=>{st.classList.add('ok'); stTxt.innerText='Online'; document.title='● Telepad'; rt=0; clr(); fetchMedia();};
   ws.onclose=()=>{st.classList.remove('ok'); stTxt.innerText='Offline'; document.title='○ Telepad'; setTimeout(connect,Math.min(1000*2**rt++,30000));};
 }
@@ -252,7 +252,7 @@ const svgs = {
 async function fetchMedia(){
   if(ws?.readyState!==1)return;
   try {
-    const res=await fetch('/media');
+    const res=await fetch('/media'+location.search);
     const data=await res.json();
     
     // Update Battery + Volume

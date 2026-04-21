@@ -241,10 +241,21 @@ def get_status():
         data["sys"]["vol"] = None
     return json.dumps(data).encode('utf-8')
 
+import secrets
+import string
+
+TOKEN = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+
 def handle(conn, addr):
     conn.settimeout(60)
     try:
         req = conn.recv(4096).decode('utf-8', errors='ignore')
+        if not req: return
+        request_line = req.split('\r\n')[0]
+        if f'token={TOKEN}' not in request_line:
+            conn.sendall(b"HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized")
+            return
+            
         if 'Upgrade: websocket' in req:
             for ln in req.split('\r\n'):
                 if ln.startswith('Sec-WebSocket-Key:'):
@@ -319,7 +330,7 @@ if __name__ == '__main__':
         sys.exit(1)
     srv.listen(8)
     ip = get_ip()
-    url = f"http://{ip}:{PORT}"
+    url = f"http://{ip}:{PORT}/?token={TOKEN}"
     print(f"\n  Telepad Server Running")
     print(f"  {url}\n")
     
