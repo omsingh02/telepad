@@ -1,0 +1,4 @@
+Placeholder so the libs/ directory is tracked.
+You must download noise-java-0.5.0.jar from
+  https://github.com/rweather/noise-java/releases
+and drop it here before building.

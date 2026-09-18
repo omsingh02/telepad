@@ -1,96 +1,81 @@
-<div align="center">
-  <img src="assets/logo.png" width="144" alt="Telepad Logo" />
-  <h1>🕹️ Telepad</h1>
-  <p><strong>A beautifully simple, local remote control for your Windows & Linux PCs.</strong></p>
-  
-  <p>
-    <a href="https://github.com/omsingh02/telepad/stargazers"><img src="https://img.shields.io/github/stars/omsingh02/telepad?style=flat-square&color=yellow" alt="Stars" /></a>
-    <a href="https://github.com/omsingh02/telepad/network/members"><img src="https://img.shields.io/github/forks/omsingh02/telepad?style=flat-square&color=blue" alt="Forks" /></a>
-    <a href="https://github.com/omsingh02/telepad/issues"><img src="https://img.shields.io/github/issues/omsingh02/telepad?style=flat-square&color=red" alt="Issues" /></a>
-    <img src="https://img.shields.io/badge/Python-3.x-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
-    <img src="https://img.shields.io/badge/Cross_Platform-Win_|_Linux-lightgrey?style=flat-square" alt="OS" />
-  </p>
-</div>
+# Telepad
 
-<br />
+Turn your phone into a low-latency touchpad + keyboard for your PC over Wi-Fi or Bluetooth HID.
 
-**Telepad** is a blazing-fast WebSocket server built mostly on Python's standard library. It instantly turns your smartphone into a premium remote control—giving you full access to your desktop trackpad, media controls, and keyboard, without touching heavy GUI frameworks. Built to flawlessly orchestrate raw native APIs.
+- **Wi-Fi mode**: UDP with Noise IK encryption (forward secret, mutually authenticated, ~3–8 ms median latency on LAN).
+- **Bluetooth mode**: Standard HID profile — works as a driverless keyboard/mouse on Windows, macOS, Linux, Smart TVs.
+- **TOFU pairing**: Verify a 12-character fingerprint on first connect, then silent forever.
+- **No telemetry, no cloud, no accounts.**
 
----
+## Features
 
-## ✨ Features
+- Multi-touch trackpad with configurable acceleration curves (Linear / macOS / Windows / Flat).
+- Full keyboard with sticky modifiers, function row, navigation cluster, quick actions (Copy/Paste/Cut/Undo/Alt+Tab/Win+D).
+- Clipboard sync between phone and PC (Wi-Fi mode).
+- Now-playing card with media controls pulled from Windows SMTC.
+- Presentation mode (large slide forward/back tap zones).
+- Quick launchers for common system actions.
+- Light/dark/system theme with dynamic color support on Android 12+.
+- Optional foreground service to keep the connection alive when the app is backgrounded.
 
-- **Responsive Touchpad:** Seamless raw mouse movements. Tap to click, two-finger tap for right-click, and drag two fingers up/down to scroll.
-- **Media Mastery:** Play/Pause, Next/Prev, Volume Up/Down, and Mute are just one tap away.
-- **Full Keyboard Emulation:** Start typing naturally on your phone to send text instantly. Features dedicated toggle buttons for native modifiers (`Ctrl`, `Alt`, `Shift`, and `Win`/`Super`).
-- **Zero-Bloat Frontend:** No Node.js, no hefty web-framework overhead. The single local `index.html` file runs entirely with optimized CSS and minimal socket hooks.
+## Project structure
 
----
+```
+telepad/
+├── android/          # Android client (Kotlin + Compose, minSdk 28, targetSdk 35)
+├── server/           # Windows desktop server (C99, Win32 API)
+├── README.md
+└── LICENSE           # MIT
+```
 
-## 🚀 Quick Setup
+## Building
 
-First, ensure your phone and PC are connected to the **same Wi-Fi network**.
+### Prerequisites
 
-### Windows (Zero Dependency)
-Clone the repository and start the server. No `pip` install needed!
+1. **Android Studio Ladybug** or newer (Gradle 8.10+, JDK 17+).
+2. **CMake 3.21+** and **Visual Studio 2022 Build Tools** (for Windows server).
+3. Two vendored dependencies you must download yourself:
+   - **noise-java**: download `noise-java-0.5.0.jar` from <https://github.com/rweather/noise-java/releases> and drop it into `android/app/libs/`.
+   - **noise-c**: `cd server && git clone https://github.com/rweather/noise-c third_party/noise-c`.
+
+### Android
+
 ```bash
-git clone https://github.com/omsingh02/telepad.git
-cd telepad
-python src/main.py
+cd android
+./gradlew assembleRelease
+# APK: app/build/outputs/apk/release/app-release.apk
 ```
 
-### Linux (Wayland / X11 Compatible)
-Linux requires the `evdev` package to inject inputs directly into the kernel's `/dev/uinput` mapping, ensuring perfect performance across even strict Wayland compositors (like Hyprland)!
+### Windows server
+
 ```bash
-git clone https://github.com/omsingh02/telepad.git
-cd telepad
-
-# Install evdev (Either via pip or your system package manager)
-pip install -r requirements-linux.txt 
-# or: sudo pacman -S python-evdev 
-
-# Run the server. Elevated permission is required to access /dev/uinput! (-E preserves Wayland environment)
-sudo -E python src/main.py
+cd server
+cmake -B build -G "Visual Studio 17 2022"
+cmake --build build --config Release
+# Binary: build/Release/telepad-server.exe
 ```
-> **Note:** If you do not want to run `sudo`, ensure your user belongs to the `input` group and your system has a udev rule permitting `/dev/uinput` read/write access.
 
----
+## Running
 
-### Connect from your device
-Once running, the Python console will print a secure local network address:
-```text
-  Telepad Server Running
-  http://192.168.X.X:5000
-```
-Open that URL in your phone's browser, and you are immediately connected!
+1. Launch `telepad-server.exe` on your Windows PC. It prints:
+   ```
+   Telepad server listening on 0.0.0.0:5000
+   Hostname: DESKTOP-XYZ
+   Fingerprint: 7F2A · B9C1 · 4E08
+   ```
+2. Open Telepad on your phone (same Wi-Fi network).
+3. Tap your PC in the discovered list.
+4. Verify the fingerprint shown on the phone matches the one printed on the PC, then tap **Trust this PC**.
+5. Done. Touchpad and keyboard work immediately. Future connects are silent.
 
----
+## Security model
 
-## 🛠️ Advanced Details
+- **Threat:** An attacker on the same LAN tries to intercept your typing.
+- **Defense:** Noise IK handshake with a long-term server static key. The fingerprint you verify on first connect binds your phone to that specific server pubkey. Any subsequent MitM attempt produces a fingerprint mismatch (caught by the phone) or a decrypt failure (caught by Noise's authenticated encryption).
+- **Forward secrecy:** ChaCha20-Poly1305 session keys are derived per-session from ephemeral X25519 keypairs. Past sessions cannot be decrypted even if either party's static key is later compromised.
+- **No cloud, no accounts, no telemetry.** Pairing data lives on-device in EncryptedSharedPreferences (Android Keystore-wrapped) on the phone and in `%APPDATA%\Telepad\` on the PC.
 
-<details>
-<summary><strong>Project Structure</strong></summary>
-<br>
+## License
 
-- `src/main.py`: The unified backend. It abstracts OS boundaries using an `InputController` layout. On Windows it uses `ctypes.windll.user32`, and on Linux, it bootstraps a persistent virtual `evdev.UInput` device.
-- `src/index.html`: The lightweight frontend GUI. Designed strictly with system fonts and generic mobile-first CSS for near-zero latency rendering and parsing.
-</details>
-
-<details>
-<summary><strong>Security & Connectivity</strong></summary>
-<br>
-
-When executing `main.py`, the socket server binds directly to `0.0.0.0:5000` to be accessible across your WLAN. For optimal security, this should only be run on a trusted home network. If you encounter issues connecting, momentarily verify if your Firewall is blocking incoming Python network connections.
-</details>
-
----
-
-## ⌨️ Contribution
-
-Built for hackers, automation enthusiasts, and couch-potatoes alike. Feel free to fork, experiment, and submit Pull Requests for any new macros or interface upgrades!
-
-<br />
-
-<div align="center">
-  <sub>Extracted, refined, and modernized with ❤️ based on KDE Connect utilities.</sub>
-</div>
+MIT. See LICENSE.
+`

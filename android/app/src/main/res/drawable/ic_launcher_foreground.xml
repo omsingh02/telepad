@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Simple stylized "T" mark in cyan on the dark slate background. -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M30,38 L78,38 L78,48 L60,48 L60,80 L48,80 L48,48 L30,48 Z" />
+    <path
+        android:fillColor="#38BDF8"
+        android:fillAlpha="0.35"
+        android:pathData="M22,30 L86,30 L86,86 L22,86 Z M30,38 L30,78 L78,78 L78,38 Z" />
+</vector>

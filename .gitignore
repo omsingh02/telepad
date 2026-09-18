@@ -1,21 +1,52 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+# Build artifacts
+**/build/
+*.iml
+*.class
+*.jar
+!gradle-wrapper.jar
+!**/gradle-wrapper.jar
+*.so
+*.dll
+*.exe
+*.o
+*.obj
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# IDEs
+# IDE
 .idea/
 .vscode/
+*.swp
+*.swo
 
-# OS generated files
+# OS
 .DS_Store
 Thumbs.db
+
+# Local Android config (paths differ per developer machine)
+local.properties
+*.keystore
+*.jks
+
+# Server build outputs
+server/build/
+server/out/
+server/cmake-build-*/
+
+# Server vendored deps (you must clone these locally)
+server/third_party/noise-c/
+
+# Android libs that must be vendored (download yourself)
+android/app/libs/*.jar
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Test coverage
+coverage/
+*.gcov
+*.gcda
+*.gcno

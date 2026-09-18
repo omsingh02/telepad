@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Telepad</string>
+
+    <!-- Nav destinations -->
+    <string name="nav_home">Home</string>
+    <string name="nav_touchpad">Touchpad</string>
+    <string name="nav_keyboard">Keyboard</string>
+    <string name="nav_controls">Remote</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_welcome_title">Welcome to Telepad</string>
+    <string name="onboarding_welcome_body">Turn your phone into a touchpad and keyboard for your PC. Fast, private, no account needed.</string>
+    <string name="onboarding_install_title">Install the desktop app</string>
+    <string name="onboarding_install_body">Telepad needs a tiny companion app on your PC. Visit telepad.app/download.</string>
+    <string name="onboarding_network_title">Use the same Wi-Fi</string>
+    <string name="onboarding_network_body">Your phone and PC must be on the same Wi-Fi network. Or use Bluetooth if Wi-Fi isn\'t available.</string>
+    <string name="onboarding_ready_title">You\'re ready</string>
+    <string name="onboarding_ready_body">Telepad will discover your PC automatically. The first connection asks you to verify a short fingerprint.</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_get_started">Get started</string>
+
+    <!-- Home -->
+    <string name="home_no_pc_title">No PCs found</string>
+    <string name="home_no_pc_body">Make sure the Telepad app is running on your PC and you\'re on the same network.</string>
+    <string name="home_add_device">Add a device</string>
+    <string name="home_recent">Recent</string>
+    <string name="home_discovered">Discovered</string>
+    <string name="home_paired_bluetooth">Paired (Bluetooth)</string>
+
+    <!-- Pairing -->
+    <string name="pairing_title">Verify this PC</string>
+    <string name="pairing_body">Make sure these characters match what\'s shown on your PC. If they don\'t match, someone may be impersonating your PC.</string>
+    <string name="pairing_trust">Trust this PC</string>
+    <string name="pairing_cancel">Cancel</string>
+    <string name="pairing_already_trusted">This PC is already trusted.</string>
+
+    <!-- Add device -->
+    <string name="add_device_title">Add a device</string>
+    <string name="add_device_scan">Search the network</string>
+    <string name="add_device_scanning">Searching…</string>
+    <string name="add_device_stop">Stop</string>
+    <string name="add_device_manual">Enter IP address manually</string>
+    <string name="add_device_manual_ip_label">IP address</string>
+    <string name="add_device_manual_port_label">Port</string>
+    <string name="add_device_connect">Connect</string>
+    <string name="add_device_cancel">Cancel</string>
+
+    <!-- Touchpad -->
+    <string name="touchpad_intro_title">How to use the touchpad</string>
+    <string name="touchpad_intro_move">Drag to move</string>
+    <string name="touchpad_intro_tap">Tap to click</string>
+    <string name="touchpad_intro_scroll">Two fingers to scroll</string>
+    <string name="touchpad_intro_right_click">Two-finger tap = right click</string>
+    <string name="touchpad_intro_drag">Double-tap and hold to drag</string>
+    <string name="touchpad_intro_dismiss">Got it</string>
+    <string name="touchpad_left_click">Left click</string>
+    <string name="touchpad_right_click">Right click</string>
+    <string name="touchpad_show_buttons">Show buttons</string>
+
+    <!-- Keyboard -->
+    <string name="keyboard_input_placeholder">Type here — sent to PC as you type</string>
+    <string name="keyboard_quick_copy">Copy</string>
+    <string name="keyboard_quick_paste">Paste</string>
+    <string name="keyboard_quick_cut">Cut</string>
+    <string name="keyboard_quick_undo">Undo</string>
+    <string name="keyboard_quick_redo">Redo</string>
+    <string name="keyboard_quick_alt_tab">Alt+Tab</string>
+    <string name="keyboard_quick_win_d">Show desktop</string>
+
+    <!-- Controls -->
+    <string name="controls_media">Media</string>
+    <string name="controls_volume">Volume</string>
+    <string name="controls_system">System</string>
+    <string name="controls_lock">Lock screen</string>
+    <string name="controls_presentation">Presentation mode</string>
+
+    <!-- Settings -->
+    <string name="settings_touchpad">Touchpad</string>
+    <string name="settings_keyboard">Keyboard</string>
+    <string name="settings_connection">Connection</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_privacy">Privacy</string>
+    <string name="settings_about">About</string>
+
+    <string name="setting_sensitivity">Sensitivity</string>
+    <string name="setting_scroll_speed">Scroll speed</string>
+    <string name="setting_tap_to_click">Tap to click</string>
+    <string name="setting_natural_scrolling">Natural scrolling</string>
+    <string name="setting_natural_scrolling_subtitle">Content tracks finger movement</string>
+    <string name="setting_double_tap_drag">Double-tap drag</string>
+    <string name="setting_two_finger_right_click">Two-finger right click</string>
+    <string name="setting_acceleration_curve">Acceleration curve</string>
+    <string name="setting_haptic">Haptic feedback</string>
+    <string name="setting_theme">Theme</string>
+    <string name="setting_theme_system">Follow system</string>
+    <string name="setting_theme_light">Light</string>
+    <string name="setting_theme_dark">Dark</string>
+    <string name="setting_keep_alive">Keep connection alive in background</string>
+    <string name="setting_clipboard_sync">Clipboard sync</string>
+    <string name="setting_reset_defaults">Reset to defaults</string>
+    <string name="setting_forget_devices">Forget all paired devices</string>
+
+    <!-- Permissions -->
+    <string name="perm_bluetooth_title">Bluetooth permission needed</string>
+    <string name="perm_bluetooth_body">Telepad needs Bluetooth access to connect to your PC as a wireless keyboard and mouse.</string>
+    <string name="perm_grant">Grant permission</string>
+
+    <!-- Connection status -->
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_reconnecting">Reconnecting…</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_error">Error</string>
+
+    <!-- Foreground service notification -->
+    <string name="notification_channel_name">Telepad connection</string>
+    <string name="notification_channel_description">Shown while Telepad is connected to a PC.</string>
+    <string name="notification_title">Telepad connected</string>
+    <string name="notification_disconnect">Disconnect</string>
+</resources>

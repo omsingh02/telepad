@@ -1,0 +1,11 @@
+build/
+out/
+cmake-build-*/
+.vs/
+.vscode/
+*.exe
+*.obj
+*.o
+*.pdb
+CMakeUserPresets.json
+third_party/noise-c/
