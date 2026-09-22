@@ -196,7 +196,9 @@ class BluetoothInputDispatcher(
     override suspend fun connect(target: ConnectionTarget) {
         val bt = target as? ConnectionTarget.Bluetooth ?: return
         _connectionState.value = ConnectionState.Connecting
-        val adapter = BluetoothAdapter.getDefaultAdapter() ?: run {
+        val adapter = hidController.context.getSystemService(
+            android.bluetooth.BluetoothManager::class.java
+        )?.adapter ?: run {
             _connectionState.value = ConnectionState.Error("Bluetooth unavailable")
             return
         }

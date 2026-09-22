@@ -50,10 +50,7 @@ fun StatusBar(
     if (state !is ConnectionState.Connected) return
 
     val dotColor by animateColorAsState(
-        targetValue = when (state) {
-            is ConnectionState.Connected -> StatusOnline
-            else -> StatusOffline
-        },
+        targetValue = StatusOnline,
         label = "statusDot"
     )
 

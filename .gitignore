@@ -1,5 +1,7 @@
 # Build artifacts
 **/build/
+target/
+dist/
 *.iml
 *.class
 *.jar
@@ -23,6 +25,7 @@ Thumbs.db
 
 # Local Android config (paths differ per developer machine)
 local.properties
+keystore.properties
 *.keystore
 *.jks
 

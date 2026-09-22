@@ -49,12 +49,18 @@ class NsdHelper(context: Context) {
 
             override fun onServiceFound(svc: NsdServiceInfo) {
                 if (!svc.serviceType.contains(SERVICE_TYPE_FRAGMENT)) return
+                @Suppress("DEPRECATION")
                 nsd.resolveService(svc, object : NsdManager.ResolveListener {
                     override fun onResolveFailed(s: NsdServiceInfo?, c: Int) {
                         Log.w(TAG, "resolve failed code=$c")
                     }
                     override fun onServiceResolved(s: NsdServiceInfo) {
-                        val host = s.host?.hostAddress ?: return
+                        val host = if (android.os.Build.VERSION.SDK_INT >= 34) {
+                            s.hostAddresses.firstOrNull()?.hostAddress
+                        } else {
+                            @Suppress("DEPRECATION")
+                            s.host?.hostAddress
+                        } ?: return
                         val info = ServerInfo(
                             name = s.serviceName.ifBlank { host },
                             host = host,

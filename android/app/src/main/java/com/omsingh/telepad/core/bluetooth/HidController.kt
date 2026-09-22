@@ -40,7 +40,7 @@ import java.util.concurrent.Executors
  * the caller's perspective — we return immediately and the kernel queues.
  */
 @SuppressLint("MissingPermission")
-class HidController(private val context: Context) {
+class HidController(val context: Context) {
 
     /** Externally observable state of the HID stack. */
     sealed interface HidState {

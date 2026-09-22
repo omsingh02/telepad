@@ -1,7 +1,6 @@
 package com.omsingh.telepad
 
 import android.Manifest
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -13,8 +12,6 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.omsingh.telepad.ui.theme.TelepadTheme
 import com.omsingh.telepad.viewmodel.MainViewModel
@@ -59,20 +56,12 @@ class MainActivity : ComponentActivity() {
 
     private val bluetoothGranted by lazy { mutableStateOf(hasBluetoothPermission()) }
 
-    private lateinit var onboardingPrefs: SharedPreferences
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        onboardingPrefs = getSharedPreferences("telepad_onboarding", MODE_PRIVATE)
-        val initialOnboardingShown = onboardingPrefs.getBoolean(KEY_ONBOARDING_SHOWN, false)
-        val initialIntroShown = onboardingPrefs.getBoolean(KEY_TOUCHPAD_INTRO_SHOWN, false)
-
         setContent {
             val prefs by settingsViewModel.preferences.collectAsState()
-            var onboardingShown by remember { mutableStateOf(initialOnboardingShown) }
-            var introShown by remember { mutableStateOf(initialIntroShown) }
 
             TelepadTheme(
                 themeMode = prefs.themeMode,
@@ -83,15 +72,13 @@ class MainActivity : ComponentActivity() {
                     mainViewModel = mainViewModel,
                     settingsViewModel = settingsViewModel,
                     pairingViewModel = pairingViewModel,
-                    onboardingShown = onboardingShown,
+                    onboardingShown = prefs.onboardingShown,
                     onOnboardingFinished = {
-                        onboardingPrefs.edit().putBoolean(KEY_ONBOARDING_SHOWN, true).apply()
-                        onboardingShown = true
+                        settingsViewModel.updatePreferences { it.copy(onboardingShown = true) }
                     },
-                    introShown = introShown,
+                    introShown = prefs.touchpadIntroShown,
                     onIntroDismissed = {
-                        onboardingPrefs.edit().putBoolean(KEY_TOUCHPAD_INTRO_SHOWN, true).apply()
-                        introShown = true
+                        settingsViewModel.updatePreferences { it.copy(touchpadIntroShown = true) }
                     },
                     bluetoothGranted = bluetoothGranted.value,
                     onRequestBluetooth = {
@@ -104,10 +91,5 @@ class MainActivity : ComponentActivity() {
 
     private fun hasBluetoothPermission(): Boolean = bluetoothPermissions.all { p ->
         ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private companion object {
-        const val KEY_ONBOARDING_SHOWN = "onboarding_shown"
-        const val KEY_TOUCHPAD_INTRO_SHOWN = "touchpad_intro_shown"
     }
 }

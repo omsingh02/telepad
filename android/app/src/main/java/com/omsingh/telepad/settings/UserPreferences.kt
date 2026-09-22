@@ -45,6 +45,10 @@ data class UserPreferences(
 
     // ── Developer ────────────────────────────────────────────────────
     val debugLatencyOverlay: Boolean = false,
+
+    // ── Onboarding & Guides ──────────────────────────────────────────
+    val onboardingShown: Boolean = false,
+    val touchpadIntroShown: Boolean = false,
 )
 
 @Serializable

@@ -50,6 +50,7 @@ class TouchpadProcessor(
     private var isDragging = false              // Drag mode active (button held)
     private var pendingTap = false              // First tap seen; waiting for a double
     private var pendingTapTime = 0L             // When the pending tap landed
+    private var isDoubleTapCandidate = false    // Second DOWN received within window
     private var longPressFired = false          // Don't fire long-press twice
     private var scrollAccumulator = 0f          // Sub-notch scroll carry-over
 
@@ -67,7 +68,7 @@ class TouchpadProcessor(
      * No buffering, no main-thread post — events are dispatched immediately.
      */
     fun onTouchEvent(event: MotionEvent) {
-        val now = SystemClock.uptimeMillis()
+        val now = if (event.eventTime > 0) event.eventTime else SystemClock.uptimeMillis()
         when (event.actionMasked) {
 
             MotionEvent.ACTION_DOWN -> {
@@ -79,12 +80,11 @@ class TouchpadProcessor(
                 longPressFired = false
                 scrollAccumulator = 0f
 
-                // Double-tap-and-hold → drag mode starts on the *second* DOWN.
-                if (doubleTapDrag && pendingTap &&
-                    (now - pendingTapTime) <= DOUBLE_TAP_WINDOW_MS
-                ) {
-                    isDragging = true
-                    onEvent(InputEvent.DragStart(InputEvent.Button.LEFT))
+                // Check if this DOWN falls inside the double-tap window
+                if (pendingTap && (now - pendingTapTime) <= DOUBLE_TAP_WINDOW_MS) {
+                    isDoubleTapCandidate = true
+                } else {
+                    isDoubleTapCandidate = false
                     pendingTap = false
                 }
             }
@@ -93,6 +93,7 @@ class TouchpadProcessor(
                 if (event.pointerCount > maxFingers) maxFingers = event.pointerCount
                 // Multi-touch overrides any pending single-tap.
                 pendingTap = false
+                isDoubleTapCandidate = false
                 scrollAccumulator = 0f
             }
 
@@ -119,6 +120,11 @@ class TouchpadProcessor(
                 if (isDragging) {
                     onEvent(InputEvent.DragEnd(InputEvent.Button.LEFT))
                     isDragging = false
+                    isDoubleTapCandidate = false
+                } else if (isTap && isDoubleTapCandidate && tapToClick) {
+                    onEvent(InputEvent.DoubleClick)
+                    isDoubleTapCandidate = false
+                    pendingTap = false
                 } else if (isTap && tapToClick) {
                     handleTap(now)
                 }
@@ -133,6 +139,7 @@ class TouchpadProcessor(
                 }
                 maxFingers = 0
                 pendingTap = false
+                isDoubleTapCandidate = false
                 scrollAccumulator = 0f
             }
         }
@@ -171,6 +178,14 @@ class TouchpadProcessor(
         lastY = y
 
         totalMovement += hypot(rawDx, rawDy)
+
+        // Double-tap-and-hold → drag mode activates when movement starts on the second tap
+        if (isDoubleTapCandidate && doubleTapDrag && totalMovement >= TAP_MAX_MOVEMENT_PX && !isDragging) {
+            isDragging = true
+            isDoubleTapCandidate = false
+            pendingTap = false
+            onEvent(InputEvent.DragStart(InputEvent.Button.LEFT))
+        }
 
         // Long-press right-click: fires once if user holds still past threshold.
         if (longPressRightClick &&

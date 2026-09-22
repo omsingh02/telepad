@@ -34,6 +34,63 @@ static const char *key_path(char *out, size_t cap) {
     return out;
 }
 
+#ifdef _WIN32
+#include <wincrypt.h>
+#pragma comment(lib, "crypt32.lib")
+
+/* Write key encrypted with DPAPI (user-scoped). */
+static int save_key_dpapi(const char *path, const uint8_t *key, int len) {
+    DATA_BLOB in_blob = { .cbData = (DWORD)len, .pbData = (BYTE *)key };
+    DATA_BLOB out_blob = {0};
+    if (!CryptProtectData(&in_blob, L"Telepad Server Key", NULL, NULL, NULL,
+                          0, &out_blob))
+        return -1;
+    FILE *f = fopen(path, "wb");
+    if (!f) { LocalFree(out_blob.pbData); return -1; }
+    fwrite(out_blob.pbData, 1, out_blob.cbData, f);
+    fclose(f);
+    LocalFree(out_blob.pbData);
+    return 0;
+}
+
+/* Read key decrypted with DPAPI. Returns 32 on success, -1 on failure. */
+static int load_key_dpapi(const char *path, uint8_t *key, int cap) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    if (sz <= 0 || sz > 4096) { fclose(f); return -1; }
+    fseek(f, 0, SEEK_SET);
+    uint8_t *blob = (uint8_t *)malloc((size_t)sz);
+    if (!blob) { fclose(f); return -1; }
+    size_t rd = fread(blob, 1, (size_t)sz, f);
+    fclose(f);
+    if ((long)rd != sz) { free(blob); return -1; }
+
+    /* If file is exactly 32 bytes, it's the old raw format — migrate. */
+    if (sz == 32) {
+        if (cap < 32) { free(blob); return -1; }
+        memcpy(key, blob, 32);
+        free(blob);
+        /* Re-save with DPAPI protection. */
+        save_key_dpapi(path, key, 32);
+        printf("Migrated server key to DPAPI-protected format.\n");
+        return 32;
+    }
+
+    DATA_BLOB in_blob = { .cbData = (DWORD)sz, .pbData = blob };
+    DATA_BLOB out_blob = {0};
+    BOOL ok = CryptUnprotectData(&in_blob, NULL, NULL, NULL, NULL, 0, &out_blob);
+    free(blob);
+    if (!ok) return -1;
+    if ((int)out_blob.cbData > cap) { LocalFree(out_blob.pbData); return -1; }
+    memcpy(key, out_blob.pbData, out_blob.cbData);
+    int result = (int)out_blob.cbData;
+    LocalFree(out_blob.pbData);
+    return result;
+}
+#endif
+
 static int load_or_create_keypair(void) {
     if (noise_dhstate_new_by_id(&g_static_kp, NOISE_DH_CURVE25519) != NOISE_ERROR_NONE)
         return -1;
@@ -41,6 +98,17 @@ static int load_or_create_keypair(void) {
     char path[1024];
     if (!key_path(path, sizeof(path))) return -1;
 
+#ifdef _WIN32
+    uint8_t priv[32];
+    if (load_key_dpapi(path, priv, 32) == 32) {
+        noise_dhstate_set_keypair_private(g_static_kp, priv, 32);
+    } else {
+        if (noise_dhstate_generate_keypair(g_static_kp) != NOISE_ERROR_NONE)
+            return -1;
+        noise_dhstate_get_keypair(g_static_kp, priv, sizeof(priv), g_static_pub, sizeof(g_static_pub));
+        save_key_dpapi(path, priv, 32);
+    }
+#else
     FILE *f = fopen(path, "rb");
     if (f) {
         uint8_t priv[32];
@@ -58,10 +126,9 @@ static int load_or_create_keypair(void) {
             fwrite(priv, 1, 32, f);
             fclose(f);
         }
-#ifndef _WIN32
         chmod(path, 0600);
-#endif
     }
+#endif
     noise_dhstate_get_public_key(g_static_kp, g_static_pub, sizeof(g_static_pub));
     return 0;
 }
@@ -150,6 +217,16 @@ int telepad_noise_handshake_respond(telepad_noise_t *c,
     noise_buffer_set_input(rb, (uint8_t *)msg1, msg1_len);
     if (noise_handshakestate_read_message(hs, &rb, NULL) != NOISE_ERROR_NONE)
         goto fail;
+
+    /* Extract the client's static public key (delivered inside IK msg 1). */
+    {
+        NoiseDHState *remote_s = noise_handshakestate_get_remote_public_key_dh(hs);
+        if (remote_s) {
+            noise_dhstate_get_public_key(remote_s, c->client_pubkey, 32);
+        } else {
+            memset(c->client_pubkey, 0, 32);
+        }
+    }
 
     NoiseBuffer wb;
     noise_buffer_set_output(wb, out_resp, out_cap);

@@ -13,6 +13,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -90,12 +91,14 @@ fun TelepadNavHost(
     val nav = rememberNavController()
     var pendingPairing by remember { mutableStateOf<ServerInfo?>(null) }
 
-    // If a pairing target arrives from anywhere, push the pairing screen.
-    if (pendingPairing != null) {
-        nav.navigate(Routes.PAIRING) {
-            launchSingleTop = true
+    // Navigate to pairing screen when a pairing target is staged.
+    LaunchedEffect(pendingPairing) {
+        if (pendingPairing != null) {
+            nav.navigate(Routes.PAIRING) {
+                launchSingleTop = true
+            }
+            pendingPairing = null
         }
-        pendingPairing = null
     }
 
     Scaffold(

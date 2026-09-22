@@ -38,6 +38,7 @@ typedef struct {
 
 static client_ctx_t g_clients[MAX_CLIENTS];
 static char         g_hostname[128] = "Telepad PC";
+static int          g_verbose = 0;
 
 static void get_hostname(void) {
 #ifdef _WIN32
@@ -51,16 +52,26 @@ static void get_hostname(void) {
     g_hostname[sizeof(g_hostname) - 1] = '\0';
 }
 
-static client_ctx_t *find_or_create_client(struct sockaddr_in *addr,
-                                           socklen_t addr_len) {
-    int free_slot = -1;
+/* Look up an existing client by address. Returns NULL if not found. */
+static client_ctx_t *find_existing_client(struct sockaddr_in *addr,
+                                          socklen_t addr_len) {
+    (void)addr_len;
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (g_clients[i].in_use &&
             g_clients[i].addr.sin_addr.s_addr == addr->sin_addr.s_addr &&
             g_clients[i].addr.sin_port == addr->sin_port) {
             return &g_clients[i];
         }
-        if (!g_clients[i].in_use && free_slot < 0) free_slot = i;
+    }
+    return NULL;
+}
+
+/* Allocate a client slot. Evicts the oldest if all are full. */
+static client_ctx_t *allocate_client_slot(struct sockaddr_in *addr,
+                                          socklen_t addr_len) {
+    int free_slot = -1;
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (!g_clients[i].in_use) { free_slot = i; break; }
     }
     if (free_slot < 0) {
         /* All slots used — evict the oldest. */
@@ -119,7 +130,6 @@ static void handle_plaintext(client_ctx_t *c, int sockfd,
         case MSG_TYPE_MOUSE_MOVE: {
             if (pt_len >= (int)sizeof(MsgMouseMove)) {
                 MsgMouseMove m; memcpy(&m, pt, sizeof(m));
-                printf("Parsed MOUSE_MOVE: dx=%d, dy=%d\n", m.dx, m.dy);
                 platform_mouse_move(m.dx, m.dy);
             }
             break;
@@ -257,8 +267,10 @@ static void handle_packet(int sockfd, struct sockaddr_in *addr,
                           socklen_t addr_len, uint8_t *buf, int len) {
     if (len < 1) return;
     uint8_t tag = buf[0];
-    printf("Received packet: tag=0x%02X, len=%d from %s:%d\n", tag, len, inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
-    fflush(stdout);
+    if (g_verbose) {
+        printf("Received packet: tag=0x%02X, len=%d from %s:%d\n",
+               tag, len, inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
+    }
 
     if (tag == WIRE_DISCOVERY_PROBE) {
         if (len >= 1 + TELEPAD_DISCOVERY_MAGIC_LEN &&
@@ -275,28 +287,55 @@ static void handle_packet(int sockfd, struct sockaddr_in *addr,
     }
 
     if (tag == WIRE_HANDSHAKE_INIT) {
-        client_ctx_t *c = find_or_create_client(addr, addr_len);
-        if (!c) return;
+        /* Check if this client already has a slot (re-handshake). */
+        client_ctx_t *existing = find_existing_client(addr, addr_len);
+        if (existing) {
+            telepad_noise_session_free(&existing->noise);
+        }
+
+        /* Attempt handshake in a temporary session — validate before
+           allocating a slot so spoofed packets can't evict real clients. */
+        telepad_noise_t temp_noise;
+        memset(&temp_noise, 0, sizeof(temp_noise));
         uint8_t resp[NOISE_IK_MSG2_LEN];
         int rl = telepad_noise_handshake_respond(
-            &c->noise, buf + 1, len - 1, resp, sizeof(resp));
-        if (rl > 0) {
-            printf("Handshake response generated successfully, len=%d. Sending resp...\n", rl);
-            uint8_t out[1 + NOISE_IK_MSG2_LEN];
-            out[0] = WIRE_HANDSHAKE_RESP;
-            memcpy(out + 1, resp, (size_t)rl);
-            sendto(sockfd, (const char *)out, 1 + rl, 0,
-                   (struct sockaddr *)addr, addr_len);
-        } else {
-            printf("Handshake response generation failed! Error code: %d\n", rl);
+            &temp_noise, buf + 1, len - 1, resp, sizeof(resp));
+
+        if (rl <= 0) {
+            if (g_verbose) printf("Handshake failed (error %d)\n", rl);
+            telepad_noise_session_free(&temp_noise);
+            return;
         }
-        fflush(stdout);
+
+        /* TOFU: auto-trust new clients (phone-side fingerprint is the gate). */
+        if (!pairing_store_is_trusted(temp_noise.client_pubkey)) {
+            pairing_store_trust(temp_noise.client_pubkey);
+            printf("New client paired and trusted.\n");
+        }
+
+        /* Handshake valid — allocate or reuse a slot. */
+        client_ctx_t *c = existing ? existing : allocate_client_slot(addr, addr_len);
+        if (!c) {
+            telepad_noise_session_free(&temp_noise);
+            return;
+        }
+        c->noise = temp_noise;
+        c->last_seen = time(NULL);
+
+        printf("Handshake OK from %s:%d\n",
+               inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
+
+        uint8_t out[1 + NOISE_IK_MSG2_LEN];
+        out[0] = WIRE_HANDSHAKE_RESP;
+        memcpy(out + 1, resp, (size_t)rl);
+        sendto(sockfd, (const char *)out, 1 + rl, 0,
+               (struct sockaddr *)addr, addr_len);
         return;
     }
 
     if (tag != WIRE_TRANSPORT) return;
 
-    client_ctx_t *c = find_or_create_client(addr, addr_len);
+    client_ctx_t *c = find_existing_client(addr, addr_len);
     if (!c || !telepad_noise_ready(&c->noise)) return;
 
     uint8_t pt[BUF_SIZE];
@@ -310,7 +349,15 @@ static void handle_packet(int sockfd, struct sockaddr_in *addr,
 int main(int argc, char *argv[]) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
-    printf("Starting Telepad server on port %d…\n", TELEPAD_PORT);
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--verbose") == 0 || strcmp(argv[i], "-v") == 0) {
+            g_verbose = 1;
+        }
+    }
+
+    printf("Starting Telepad server on port %d%s\n", TELEPAD_PORT,
+           g_verbose ? " (verbose)" : "");
 
 #ifdef _WIN32
     WSADATA wsaData;

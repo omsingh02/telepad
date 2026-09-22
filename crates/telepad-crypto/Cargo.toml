@@ -1,0 +1,19 @@
+[package]
+name = "telepad-crypto"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+telepad-protocol = { path = "../telepad-protocol" }
+thiserror.workspace = true
+snow.workspace = true
+sha2.workspace = true
+base64.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Security_Cryptography", "Win32_Foundation", "Win32_System_Memory"] }

@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Grant execute permission for gradlew
+        working-directory: android
+        run: chmod +x gradlew
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Run unit tests
+        working-directory: android
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+  server:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone noise-c dependency
+        run: git clone https://github.com/rweather/noise-c server/third_party/noise-c
+      - name: Configure CMake
+        run: cmake -B server/build -S server
+      - name: Build Server
+        run: cmake --build server/build --config Release
+      - name: Run Server Tests
+        run: ctest --test-dir server/build -C Release --output-on-failure
+
+  rust:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run Cargo Tests
+        run: cargo test --workspace --verbose
+      - name: Build Rust Server Release
+        run: cargo build --release

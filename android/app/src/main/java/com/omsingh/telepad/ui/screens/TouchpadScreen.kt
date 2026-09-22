@@ -27,6 +27,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -81,6 +82,7 @@ fun TouchpadScreen(
     val haptic = LocalHapticFeedback.current
     val connectionState by viewModel.connectionState.collectAsState()
     var isPressed by remember { mutableStateOf(false) }
+    val currentHaptic by rememberUpdatedState(preferences.hapticFeedback)
 
     val processor = remember {
         TouchpadProcessor(onEvent = { event ->
@@ -88,7 +90,7 @@ fun TouchpadScreen(
                 InputEvent.Click,
                 InputEvent.DoubleClick,
                 InputEvent.RightClick -> {
-                    if (preferences.hapticFeedback) {
+                    if (currentHaptic) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     }
                 }

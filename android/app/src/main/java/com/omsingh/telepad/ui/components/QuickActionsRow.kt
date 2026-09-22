@@ -12,10 +12,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.KeyboardTab
+import androidx.compose.material.icons.automirrored.filled.KeyboardTab
 import androidx.compose.material.icons.filled.Monitor
-import androidx.compose.material.icons.filled.Redo
-import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Icon
@@ -104,17 +104,17 @@ fun QuickActionsRow(
             horizontalArrangement = Arrangement.spacedBy(Dimens.ItemSpacingSmall),
         ) {
             ChordChip(
-                icon = Icons.Filled.Undo, label = "Undo",
+                icon = Icons.AutoMirrored.Filled.Undo, label = "Undo",
                 onClick = { chord(HidKeyCodes.Z, HidModifierMask.LEFT_CTRL) },
                 modifier = Modifier.weight(1f)
             )
             ChordChip(
-                icon = Icons.Filled.Redo, label = "Redo",
+                icon = Icons.AutoMirrored.Filled.Redo, label = "Redo",
                 onClick = { chord(HidKeyCodes.Y, HidModifierMask.LEFT_CTRL) },
                 modifier = Modifier.weight(1f)
             )
             ChordChip(
-                icon = Icons.Filled.KeyboardTab, label = "Alt+Tab",
+                icon = Icons.AutoMirrored.Filled.KeyboardTab, label = "Alt+Tab",
                 onClick = { chord(HidKeyCodes.TAB, HidModifierMask.LEFT_ALT) },
                 modifier = Modifier.weight(1f)
             )

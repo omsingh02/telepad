@@ -1,0 +1,31 @@
+[package]
+name = "telepad-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "telepad-server"
+path = "src/main.rs"
+
+[dependencies]
+telepad-protocol = { path = "../telepad-protocol" }
+telepad-crypto = { path = "../telepad-crypto" }
+tokio.workspace = true
+bytes.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+arboard.workspace = true
+thiserror.workspace = true
+hostname.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Foundation",
+    "Win32_System_SystemServices",
+    "Win32_System_Shutdown",
+    "Win32_UI_WindowsAndMessaging"
+] }

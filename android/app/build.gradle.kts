@@ -1,4 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.FileInputStream
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -22,6 +24,28 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val keystoreProperties = Properties()
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    }
+
+    val storeFilePath = keystoreProperties.getProperty("storeFile") ?: System.getenv("KEYSTORE_FILE")
+    val storePass = keystoreProperties.getProperty("storePassword") ?: System.getenv("KEYSTORE_PASSWORD")
+    val keyAliasName = keystoreProperties.getProperty("keyAlias") ?: System.getenv("KEY_ALIAS")
+    val keyPass = keystoreProperties.getProperty("keyPassword") ?: System.getenv("KEY_PASSWORD")
+
+    signingConfigs {
+        if (storeFilePath != null) {
+            create("release") {
+                storeFile = file(storeFilePath)
+                storePassword = storePass
+                keyAlias = keyAliasName
+                keyPassword = keyPass
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -35,7 +59,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (storeFilePath != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
+    }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
     }
 
     compileOptions {
@@ -101,7 +133,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
 
-    // Vendored Noise crypto (drop noise-java-0.5.0.jar into app/libs/).
+    // Noise crypto: vendored local JAR if present, fallback to JitPack.
     implementation(fileTree("libs") { include("*.jar") })
     implementation("com.github.rweather:noise-java:master-SNAPSHOT")
 

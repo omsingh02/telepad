@@ -62,10 +62,25 @@ class PairingStore private constructor(
         prefs.getString(trustedKey(host), null)
 
     /**
+     * Look up whether [pubkeyBase64] is trusted under any host address.
+     * Allows seamless reconnect when a PC gets a new DHCP lease.
+     */
+    fun getTrustedPubkeyByFingerprint(pubkeyBase64: String): String? {
+        return prefs.all
+            .filterKeys { it.startsWith(TRUSTED_PREFIX) }
+            .entries
+            .firstOrNull { (_, v) -> v == pubkeyBase64 }
+            ?.value as? String
+    }
+
+    /**
      * Persist [pubkeyBase64] as the trusted pubkey for [host]. Idempotent.
      */
     fun trust(host: String, pubkeyBase64: String) {
-        prefs.edit().putString(trustedKey(host), pubkeyBase64).apply()
+        prefs.edit()
+            .putString(trustedKey(host), pubkeyBase64)
+            .putString(PUBKEY_PREFIX + pubkeyBase64, host)
+            .apply()
         Log.i(TAG, "Trusted host: $host")
     }
 
@@ -73,13 +88,19 @@ class PairingStore private constructor(
      * Forget a previously trusted host. Used by Settings → Privacy → Forget device.
      */
     fun forget(host: String) {
-        prefs.edit().remove(trustedKey(host)).apply()
+        val pubkey = getTrustedPubkey(host)
+        prefs.edit().apply {
+            remove(trustedKey(host))
+            if (pubkey != null) {
+                remove(PUBKEY_PREFIX + pubkey)
+            }
+        }.apply()
         Log.i(TAG, "Forgot host: $host")
     }
 
     /** Forget every trusted host. Local static key is preserved. */
     fun forgetAll() {
-        val all = prefs.all.keys.filter { it.startsWith(TRUSTED_PREFIX) }
+        val all = prefs.all.keys.filter { it.startsWith(TRUSTED_PREFIX) || it.startsWith(PUBKEY_PREFIX) }
         prefs.edit().apply { all.forEach { remove(it) } }.apply()
         Log.i(TAG, "Forgot all hosts (${all.size})")
     }
@@ -152,6 +173,7 @@ class PairingStore private constructor(
         private const val TAG = "PairingStore"
         private const val PREFS_NAME = "telepad_pairing"
         private const val TRUSTED_PREFIX = "host:"
+        private const val PUBKEY_PREFIX = "pubkey:"
         private const val KEY_LOCAL_STATIC = "local_static_priv"
 
         @Volatile private var INSTANCE: PairingStore? = null

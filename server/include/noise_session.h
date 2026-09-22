@@ -15,6 +15,7 @@ typedef struct {
     NoiseCipherState *send;
     NoiseCipherState *recv;
     int               ready;
+    uint8_t           client_pubkey[32]; /* Extracted from Noise IK msg 1 */
 } telepad_noise_t;
 
 /* Process-wide init / cleanup. Loads or generates the server's long-term

@@ -56,6 +56,9 @@ class SettingsRepository(private val context: Context) {
         val HAPTIC                  = booleanPreferencesKey("haptic")
         // Developer
         val DEBUG_LATENCY           = booleanPreferencesKey("debug_latency")
+        // Onboarding & Guides
+        val ONBOARDING_SHOWN        = booleanPreferencesKey("onboarding_shown")
+        val TOUCHPAD_INTRO_SHOWN    = booleanPreferencesKey("touchpad_intro_shown")
     }
 
     /** Reactive view. Emits on any write. UI binds to this via `collectAsState`. */
@@ -100,6 +103,8 @@ class SettingsRepository(private val context: Context) {
         accentColor         = enumOf(p[Keys.ACCENT_COLOR], AccentColor.CYAN),
         hapticFeedback      = p[Keys.HAPTIC] ?: true,
         debugLatencyOverlay = p[Keys.DEBUG_LATENCY] ?: false,
+        onboardingShown     = p[Keys.ONBOARDING_SHOWN] ?: false,
+        touchpadIntroShown  = p[Keys.TOUCHPAD_INTRO_SHOWN] ?: false,
     )
 
     private fun encode(p: androidx.datastore.preferences.core.MutablePreferences, u: UserPreferences) {
@@ -120,6 +125,8 @@ class SettingsRepository(private val context: Context) {
         p[Keys.ACCENT_COLOR]            = u.accentColor.name
         p[Keys.HAPTIC]                  = u.hapticFeedback
         p[Keys.DEBUG_LATENCY]           = u.debugLatencyOverlay
+        p[Keys.ONBOARDING_SHOWN]        = u.onboardingShown
+        p[Keys.TOUCHPAD_INTRO_SHOWN]    = u.touchpadIntroShown
     }
 
     private inline fun <reified T : Enum<T>> enumOf(value: String?, fallback: T): T =

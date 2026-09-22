@@ -24,9 +24,9 @@ import androidx.compose.material.icons.filled.PresentToAll
 import androidx.compose.material.icons.filled.Screenshot
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.VolumeDown
-import androidx.compose.material.icons.filled.VolumeMute
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
+import androidx.compose.material.icons.automirrored.filled.VolumeMute
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -160,15 +160,15 @@ fun ControlsScreen(viewModel: MainViewModel) {
                         IconButton(
                             onClick = { emit(InputEvent.VolumeCommand(InputEvent.VolumeDirection.DOWN)) },
                             modifier = Modifier.size(64.dp),
-                        ) { Icon(Icons.Filled.VolumeDown, "Volume down", modifier = Modifier.size(32.dp)) }
+                        ) { Icon(Icons.AutoMirrored.Filled.VolumeDown, "Volume down", modifier = Modifier.size(32.dp)) }
                         IconButton(
                             onClick = { emit(InputEvent.VolumeCommand(InputEvent.VolumeDirection.MUTE)) },
                             modifier = Modifier.size(64.dp),
-                        ) { Icon(Icons.Filled.VolumeMute, "Mute", modifier = Modifier.size(32.dp)) }
+                        ) { Icon(Icons.AutoMirrored.Filled.VolumeMute, "Mute", modifier = Modifier.size(32.dp)) }
                         IconButton(
                             onClick = { emit(InputEvent.VolumeCommand(InputEvent.VolumeDirection.UP)) },
                             modifier = Modifier.size(64.dp),
-                        ) { Icon(Icons.Filled.VolumeUp, "Volume up", modifier = Modifier.size(32.dp)) }
+                        ) { Icon(Icons.AutoMirrored.Filled.VolumeUp, "Volume up", modifier = Modifier.size(32.dp)) }
                     }
                 }
             }
