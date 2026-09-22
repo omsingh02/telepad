@@ -59,12 +59,8 @@ jobs:
           if [ -n "$KEYSTORE_BASE64" ]; then
             mkdir -p android/app
             echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
-            cat <<EOF > android/keystore.properties
-            storeFile=app/release.keystore
-            storePassword=$KEYSTORE_PASSWORD
-            keyAlias=$KEY_ALIAS
-            keyPassword=$KEY_PASSWORD
-            EOF
+            printf "storeFile=app/release.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" \
+              "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/keystore.properties
             echo "has_keystore=true" >> $GITHUB_OUTPUT
           else
             echo "has_keystore=false" >> $GITHUB_OUTPUT
