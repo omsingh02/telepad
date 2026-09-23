@@ -1,52 +1,59 @@
 name: Release
 
 on:
-  release:
-    types: [published]
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v1.0.1)'
-        required: false
-        default: 'v1.0.1'
+        description: 'Existing tag to release (e.g. v2.0.0)'
+        required: true
+        type: string
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   build-android:
     name: Build Android Release APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
-      contents: write
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
       - name: Grant execute permission for gradlew
         working-directory: android
         run: chmod +x gradlew
 
-      - name: Determine Release Tag
-        id: vars
+      - name: Validate Gradle Version against Tag
         run: |
-          TAG="${{ github.event.inputs.tag || github.event.release.tag_name || github.ref_name }}"
-          if [ -z "$TAG" ] || [ "$TAG" = "main" ]; then
-            TAG="v1.0.1"
+          CLEAN_TAG="${TAG#v}"
+          GRADLE_VN=$(grep 'versionName =' android/app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "Release tag: $TAG (clean: $CLEAN_TAG), Gradle versionName: $GRADLE_VN"
+          if [ "$CLEAN_TAG" != "$GRADLE_VN" ]; then
+            echo "::warning::Tag version ($CLEAN_TAG) does not match Gradle versionName ($GRADLE_VN)"
           fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Prepare Keystore
         id: keystore
@@ -56,78 +63,101 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || secrets.KEY_ALIAS || 'nwerf' }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            mkdir -p android/app
-            echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
-            printf "storeFile=app/release.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" \
-              "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/keystore.properties
-            echo "has_keystore=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_keystore=false" >> $GITHUB_OUTPUT
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets are required for release builds."
+            exit 1
           fi
+          mkdir -p android/app
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+          printf "storeFile=app/release.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" \
+            "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/keystore.properties
 
-      - name: Build with Gradle
+      - name: Test and Build Release APK
         working-directory: android
         env:
-          KEYSTORE_FILE: ${{ steps.keystore.outputs.has_keystore == 'true' && format('{0}/android/app/release.keystore', github.workspace) || '' }}
+          KEYSTORE_FILE: ${{ format('{0}/android/app/release.keystore', github.workspace) }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || secrets.KEY_ALIAS || 'nwerf' }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
-        run: ./gradlew assembleDebug assembleRelease -x lint --stacktrace
+        run: ./gradlew testReleaseUnitTest assembleRelease -x lint --no-daemon --stacktrace
 
-      - name: Stage APKs for release
+      - name: Stage APK for release
         run: |
           mkdir -p dist
-          TAG="${{ steps.vars.outputs.tag }}"
-          cp android/app/build/outputs/apk/debug/app-debug.apk dist/telepad-android-${TAG}-debug.apk
-          if [ -f "android/app/build/outputs/apk/release/app-release.apk" ]; then
-            cp android/app/build/outputs/apk/release/app-release.apk dist/telepad-android-${TAG}-release-signed.apk
-          elif [ -f "android/app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
-            cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/telepad-android-${TAG}-release-unsigned.apk
+          APK_SRC="android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK_SRC" ]; then
+            echo "::error::Release APK was not generated at $APK_SRC"
+            exit 1
           fi
+          cp "$APK_SRC" "dist/telepad-android-${TAG}.apk"
           ls -la dist
 
-      - name: Upload APK artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: telepad-apks
+          name: telepad-android-apk
           path: dist/*.apk
-          retention-days: 14
+          retention-days: 7
 
   build-server-windows:
     name: Build Windows Desktop Server
     runs-on: windows-latest
+    timeout-minutes: 20
     permissions:
-      contents: write
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Run Cargo Tests (Release Test Gate)
+        run: cargo test --workspace --locked --verbose
 
       - name: Build Rust Server Release
-        run: cargo build --release --bin telepad-server
+        run: cargo build --release --locked --bin telepad-server
 
       - name: Stage Windows binary
+        shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          Copy-Item target/release/telepad-server.exe dist/telepad-server-windows-x86_64.exe
+          $exePath = "target/release/telepad-server.exe"
+          if (-not (Test-Path $exePath)) {
+            Write-Error "Windows binary not found at $exePath"
+            exit 1
+          }
+          $standaloneExe = "dist/telepad-server-${env:TAG}-windows-x86_64.exe"
+          Copy-Item $exePath $standaloneExe
+          $zipPath = "dist/telepad-server-${env:TAG}-windows-x86_64.zip"
+          Compress-Archive -Path $exePath -DestinationPath $zipPath -Force
+          Get-ChildItem dist
 
       - name: Upload Windows Server artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: telepad-server-windows
-          path: dist/telepad-server-windows-x86_64.exe
-          retention-days: 14
+          path: |
+            dist/*.exe
+            dist/*.zip
+          retention-days: 7
 
   build-server-linux:
     name: Build Linux Desktop Server
-    runs-on: ubuntu-latest
-    continue-on-error: true
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
     permissions:
-      contents: write
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install system dependencies
         run: |
@@ -135,56 +165,81 @@ jobs:
           sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Run Cargo Tests (Release Test Gate)
+        run: cargo test --workspace --locked --verbose
 
       - name: Build Rust Server Release
-        run: cargo build --release --bin telepad-server
+        run: cargo build --release --locked --bin telepad-server
 
       - name: Stage Linux binary
         run: |
           mkdir -p dist
-          cp target/release/telepad-server dist/telepad-server-linux-x86_64
+          BIN_PATH="target/release/telepad-server"
+          if [ ! -f "$BIN_PATH" ]; then
+            echo "::error::Linux binary not found at $BIN_PATH"
+            exit 1
+          fi
+          chmod +x "$BIN_PATH"
+          tar -czvf "dist/telepad-server-${TAG}-linux-x86_64.tar.gz" -C target/release telepad-server
+          ls -la dist
 
       - name: Upload Linux Server artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: telepad-server-linux
-          path: dist/telepad-server-linux-x86_64
-          retention-days: 14
+          path: dist/*.tar.gz
+          retention-days: 7
 
   publish-release:
     name: Publish Release Assets
     needs: [build-android, build-server-windows, build-server-linux]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Record Commit SHA
+        id: meta
+        run: |
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo "commit_sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: release-assets
           merge-multiple: true
 
-      - name: Determine Release Tag
-        id: vars
+      - name: Generate Checksums
+        working-directory: release-assets
         run: |
-          TAG="${{ github.event.inputs.tag || github.event.release.tag_name || github.ref_name }}"
-          if [ -z "$TAG" ] || [ "$TAG" = "main" ]; then
-            TAG="v1.0.1"
-          fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-
-      - name: List Release Files
-        run: |
-          echo "Files to publish:"
-          ls -la release-assets
+          echo "Release assets staged:"
+          ls -la
+          rm -f SHA256SUMS
+          for f in *; do
+            if [ -f "$f" ]; then
+              sha256sum "$f"
+            fi
+          done > SHA256SUMS
+          echo "Generated SHA256SUMS:"
+          cat SHA256SUMS
 
       - name: Create or Update GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
-          tag_name: ${{ steps.vars.outputs.tag }}
-          name: Telepad ${{ steps.vars.outputs.tag }}
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ steps.meta.outputs.commit_sha }}
+          name: Telepad ${{ env.TAG }}
           generate_release_notes: true
           files: release-assets/*
