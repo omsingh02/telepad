@@ -7,13 +7,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -32,6 +29,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import com.omsingh.telepad.core.input.ConnectionState
 import com.omsingh.telepad.core.input.HidKeyCodes
 import com.omsingh.telepad.core.input.InputEvent
 import com.omsingh.telepad.core.input.InputEvent.Modifiers
@@ -41,55 +39,76 @@ import com.omsingh.telepad.ui.theme.Dimens
 import com.omsingh.telepad.viewmodel.MainViewModel
 
 /**
- * Keyboard screen.
- *
- * Layout (top to bottom):
- *  1. Status bar (persistent).
- *  2. **Quick actions row** — Copy/Paste/Cut/Undo/Redo/Alt+Tab/Show desktop +
- *     clipboard sync chips. The single highest-leverage UI feature.
- *  3. Sticky modifier row (Ctrl/Shift/Alt/Win). Tap to toggle, long-press
- *     to send the modifier as a standalone key.
- *  4. F-row toggle + Esc/Tab/Caps.
- *  5. Text input field (sends UTF-8 to PC as you type via Wi-Fi, ASCII
- *     via Bluetooth).
- *  6. Navigation cluster: Ins/Home/PgUp/PrtSc, Del/End/PgDn/Ent.
- *  7. Inverted-T arrow cluster.
+ * Route composable: collects state and delegates to stateless [KeyboardScreen].
  */
 @Composable
-fun KeyboardScreen(viewModel: MainViewModel) {
+fun KeyboardRoute(
+    viewModel: MainViewModel,
+    modifier: Modifier = Modifier,
+) {
     val connectionState by viewModel.connectionState.collectAsState()
     val pcClipboard by viewModel.pcClipboard.collectAsState()
+
+    KeyboardScreen(
+        connectionState = connectionState,
+        pcClipboard = pcClipboard,
+        onDisconnect = viewModel::disconnect,
+        onInputEvent = viewModel::onInputEvent,
+        onPushClipboardToPc = viewModel::pushClipboardToPc,
+        onPullClipboardFromPc = viewModel::pullClipboardFromPc,
+        onCopyPcClipboardToPhone = viewModel::copyPcClipboardToPhone,
+        onDismissPcClipboard = { viewModel.clipboardSync.clearLatest() },
+        modifier = modifier,
+    )
+}
+
+/**
+ * Pure stateless Keyboard screen.
+ */
+@Composable
+fun KeyboardScreen(
+    connectionState: ConnectionState,
+    pcClipboard: String?,
+    onDisconnect: () -> Unit,
+    onInputEvent: (InputEvent) -> Unit,
+    onPushClipboardToPc: () -> Unit,
+    onPullClipboardFromPc: () -> Unit,
+    onCopyPcClipboardToPhone: () -> Unit,
+    onDismissPcClipboard: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var modifiers by remember { mutableStateOf(Modifiers()) }
     var showFunctionRow by remember { mutableStateOf(false) }
 
     fun sendKey(code: Int) {
-        viewModel.onInputEvent(InputEvent.KeyPress(code, modifiers))
-        viewModel.onInputEvent(InputEvent.KeyRelease(code, modifiers))
+        onInputEvent(InputEvent.KeyPress(code, modifiers))
+        onInputEvent(InputEvent.KeyRelease(code, modifiers))
         // One-shot semantics: non-empty modifiers reset after key.
         if (modifiers.hasAny) modifiers = Modifiers()
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.systemBars)
-            .padding(Dimens.ScreenHorizontalPadding),
+            .padding(horizontal = Dimens.ScreenHorizontalPadding, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(Dimens.ItemSpacingSmall),
     ) {
-        StatusBar(state = connectionState, onDisconnect = { viewModel.disconnect() })
-        Spacer(Modifier.height(8.dp))
+        if (connectionState is ConnectionState.Connected) {
+            StatusBar(state = connectionState, onDisconnect = onDisconnect)
+            Spacer(Modifier.height(4.dp))
+        }
 
         QuickActionsRow(
-            onInputEvent = viewModel::onInputEvent,
-            onPushClipboardToPc = { viewModel.pushClipboardToPc() },
-            onPullClipboardFromPc = { viewModel.pullClipboardFromPc() },
+            onInputEvent = onInputEvent,
+            onPushClipboardToPc = onPushClipboardToPc,
+            onPullClipboardFromPc = onPullClipboardFromPc,
             pcClipboard = pcClipboard,
-            onCopyPcClipboardToPhone = { viewModel.copyPcClipboardToPhone() },
-            onDismissPcClipboard = { viewModel.clipboardSync.clearLatest() },
+            onCopyPcClipboardToPhone = onCopyPcClipboardToPhone,
+            onDismissPcClipboard = onDismissPcClipboard,
         )
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -132,7 +151,7 @@ fun KeyboardScreen(viewModel: MainViewModel) {
 
         TextInputCapture(
             onText = { added ->
-                viewModel.onInputEvent(InputEvent.TextInput(added, modifiers))
+                onInputEvent(InputEvent.TextInput(added, modifiers))
                 if (modifiers.hasAny) modifiers = Modifiers()
             },
             onBackspace = { sendKey(HidKeyCodes.BACKSPACE) },

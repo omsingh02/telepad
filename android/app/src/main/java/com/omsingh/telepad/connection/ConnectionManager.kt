@@ -148,7 +148,7 @@ class ConnectionManager private constructor(private val app: Application) {
 
     fun requestConnect(server: ServerInfo) {
         val trusted = pairingStore.getTrustedPubkey(server.host)
-        if (trusted != null) {
+        if (trusted != null && connectionState.value !is ConnectionState.Error) {
             // Already trusted by host — connect immediately.
             connectWifi(server.copy(pubkeyBase64 = trusted))
         } else if (server.pubkeyBase64 != null &&
@@ -182,6 +182,11 @@ class ConnectionManager private constructor(private val app: Application) {
             if (wifiDispatcher.connectionState.value is ConnectionState.Connected) {
                 favoritesRepo.saveFavorite(server)
                 nowPlaying.start()
+            } else if (wifiDispatcher.connectionState.value is ConnectionState.Error) {
+                // Don't forget trust on transient errors (network timeout, server not
+                // running, Wi-Fi dropout). Re-pairing is expensive UX — only forget
+                // trust on explicit user action (e.g. "Unpair" in settings).
+                wifiPerf.release()
             }
         }
     }

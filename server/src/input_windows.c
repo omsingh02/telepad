@@ -10,9 +10,18 @@
 int  platform_init(void)    { return 0; }
 void platform_cleanup(void) { /* no-op */ }
 
+static void ensure_input_desktop(void) {
+    HDESK desk = OpenInputDesktop(0, FALSE, MAXIMUM_ALLOWED);
+    if (desk) {
+        SetThreadDesktop(desk);
+        CloseDesktop(desk);
+    }
+}
+
 /* ── Mouse ─────────────────────────────────────────────────────── */
 
 void platform_mouse_move(int16_t dx, int16_t dy) {
+    ensure_input_desktop();
     INPUT in = {0};
     in.type = INPUT_MOUSE;
     in.mi.dx = dx;
@@ -24,6 +33,7 @@ void platform_mouse_move(int16_t dx, int16_t dy) {
 }
 
 void platform_mouse_button(uint8_t button, uint8_t pressed) {
+    ensure_input_desktop();
     static const DWORD flags[3][2] = {
         { MOUSEEVENTF_LEFTUP,   MOUSEEVENTF_LEFTDOWN   },
         { MOUSEEVENTF_RIGHTUP,  MOUSEEVENTF_RIGHTDOWN  },
@@ -37,6 +47,7 @@ void platform_mouse_button(uint8_t button, uint8_t pressed) {
 }
 
 void platform_scroll(int16_t delta) {
+    ensure_input_desktop();
     INPUT in = {0};
     in.type = INPUT_MOUSE;
     in.mi.dwFlags = MOUSEEVENTF_WHEEL;
@@ -47,6 +58,7 @@ void platform_scroll(int16_t delta) {
 /* ── Keyboard ──────────────────────────────────────────────────── */
 
 static void send_modifiers(uint8_t modifiers, BOOL pressed) {
+    ensure_input_desktop();
     INPUT inputs[8] = {0};
     int n = 0;
     DWORD flag = pressed ? 0 : KEYEVENTF_KEYUP;
@@ -101,6 +113,7 @@ static WORD hid_to_vk(uint16_t hid) {
 }
 
 static void send_vk_scancode(WORD vk, BOOL release) {
+    ensure_input_desktop();
     UINT scan = MapVirtualKey(vk, MAPVK_VK_TO_VSC_EX);
     INPUT in = {0};
     in.type = INPUT_KEYBOARD;
@@ -111,12 +124,14 @@ static void send_vk_scancode(WORD vk, BOOL release) {
 }
 
 void platform_key_press(uint16_t hid_usage, uint8_t modifiers) {
+    ensure_input_desktop();
     if (modifiers) send_modifiers(modifiers, TRUE);
     WORD vk = hid_to_vk(hid_usage);
     if (vk) send_vk_scancode(vk, FALSE);
 }
 
 void platform_key_release(uint16_t hid_usage, uint8_t modifiers) {
+    ensure_input_desktop();
     WORD vk = hid_to_vk(hid_usage);
     if (vk) send_vk_scancode(vk, TRUE);
     if (modifiers) send_modifiers(modifiers, FALSE);
@@ -124,6 +139,7 @@ void platform_key_release(uint16_t hid_usage, uint8_t modifiers) {
 
 void platform_type_text(const char *utf8, uint16_t len) {
     if (!utf8 || len == 0) return;
+    ensure_input_desktop();
     int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8, len, NULL, 0);
     if (wlen <= 0) return;
     WCHAR *w = (WCHAR *)malloc(sizeof(WCHAR) * (size_t)wlen);
@@ -155,6 +171,7 @@ void platform_type_text(const char *utf8, uint16_t len) {
 /* ── Media / Volume / Lock / Launchers ─────────────────────────── */
 
 static void send_vk_momentary(WORD vk) {
+    ensure_input_desktop();
     INPUT in = {0};
     in.type = INPUT_KEYBOARD;
     in.ki.wVk = vk;

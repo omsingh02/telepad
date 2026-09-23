@@ -8,6 +8,7 @@ on:
 
 jobs:
   android:
+    name: Android Build & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,6 +17,8 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
       - name: Grant execute permission for gradlew
         working-directory: android
         run: chmod +x gradlew
@@ -26,7 +29,29 @@ jobs:
         working-directory: android
         run: ./gradlew testDebugUnitTest --no-daemon
 
-  server:
+  rust:
+    name: Rust Workspace (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run Cargo Tests
+        run: cargo test --workspace --verbose
+      - name: Build Rust Server Release
+        run: cargo build --release --bin telepad-server
+
+  server-c:
+    name: Legacy C Server (Windows)
     runs-on: windows-latest
     continue-on-error: true
     steps:
@@ -39,14 +64,3 @@ jobs:
         run: cmake --build server/build --config Release
       - name: Run Server Tests
         run: ctest --test-dir server/build -C Release --output-on-failure
-
-  rust:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Run Cargo Tests
-        run: cargo test --workspace --verbose
-      - name: Build Rust Server Release
-        run: cargo build --release

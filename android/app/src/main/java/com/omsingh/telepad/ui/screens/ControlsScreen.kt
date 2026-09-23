@@ -5,28 +5,25 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
+import androidx.compose.material.icons.automirrored.filled.VolumeMute
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PresentToAll
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Screenshot
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.automirrored.filled.VolumeDown
-import androidx.compose.material.icons.automirrored.filled.VolumeMute
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -47,7 +44,9 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.omsingh.telepad.core.input.ConnectionState
 import com.omsingh.telepad.core.input.InputEvent
+import com.omsingh.telepad.core.media.NowPlayingState
 import com.omsingh.telepad.ui.components.NowPlayingCard
 import com.omsingh.telepad.ui.components.PresentationModePad
 import com.omsingh.telepad.ui.components.StatusBar
@@ -55,49 +54,60 @@ import com.omsingh.telepad.ui.theme.Dimens
 import com.omsingh.telepad.viewmodel.MainViewModel
 
 /**
- * Controls screen — the "remote" surface.
- *
- * Top to bottom:
- *  1. Status bar.
- *  2. **Now playing card** — auto-hides if PC isn't playing anything.
- *  3. Media transport (prev/play-pause/next).
- *  4. Volume (down/mute/up).
- *  5. **Quick launchers** — Browser / File manager / Screenshot.
- *  6. **Presentation mode** toggle that swaps the lower half for the giant
- *     tap zones from [PresentationModePad].
- *  7. System: lock screen.
- *
- * Now-playing polling starts when this screen is shown and stops when left —
- * so it costs nothing when the user isn't looking.
+ * Route composable: collects state and delegates to stateless [ControlsScreen].
  */
 @Composable
-fun ControlsScreen(viewModel: MainViewModel) {
+fun ControlsRoute(
+    viewModel: MainViewModel,
+    modifier: Modifier = Modifier,
+) {
     val connectionState by viewModel.connectionState.collectAsState()
     val nowPlaying by viewModel.nowPlayingState.collectAsState()
-    val haptic = LocalHapticFeedback.current
-
-    var presentationMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.nowPlaying.start()
     }
 
+    ControlsScreen(
+        connectionState = connectionState,
+        nowPlayingState = nowPlaying,
+        onDisconnect = viewModel::disconnect,
+        onInputEvent = viewModel::onInputEvent,
+        modifier = modifier,
+    )
+}
+
+/**
+ * Pure stateless Remote & media controls screen.
+ */
+@Composable
+fun ControlsScreen(
+    connectionState: ConnectionState,
+    nowPlayingState: NowPlayingState,
+    onDisconnect: () -> Unit,
+    onInputEvent: (InputEvent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptic = LocalHapticFeedback.current
+    var presentationMode by remember { mutableStateOf(false) }
+
     fun emit(event: InputEvent) {
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        viewModel.onInputEvent(event)
+        onInputEvent(event)
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.systemBars)
-            .padding(Dimens.ScreenHorizontalPadding),
+            .padding(horizontal = Dimens.ScreenHorizontalPadding, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(Dimens.ItemSpacing),
     ) {
-        StatusBar(state = connectionState, onDisconnect = { viewModel.disconnect() })
+        if (connectionState is ConnectionState.Connected) {
+            StatusBar(state = connectionState, onDisconnect = onDisconnect)
+        }
 
         if (!presentationMode) {
-            NowPlayingCard(state = nowPlaying)
+            NowPlayingCard(state = nowPlayingState)
 
             // Media row
             Card(
@@ -252,7 +262,7 @@ fun ControlsScreen(viewModel: MainViewModel) {
                 }
             }
             Column(modifier = Modifier.weight(1f)) {
-                PresentationModePad(onInputEvent = viewModel::onInputEvent)
+                PresentationModePad(onInputEvent = onInputEvent)
             }
         }
 

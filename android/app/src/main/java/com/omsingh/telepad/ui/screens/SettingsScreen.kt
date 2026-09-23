@@ -78,6 +78,16 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
+        SettingsCategory("Security & Pairing")
+        OutlinedButton(
+            onClick = { viewModel.forgetAllTrustedHosts() },
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .fillMaxWidth()
+        ) { Text("Forget all paired PCs") }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
         OutlinedButton(
             onClick = { viewModel.updatePreferences { UserPreferences() } },
             modifier = Modifier

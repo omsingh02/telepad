@@ -53,6 +53,8 @@ class TouchpadProcessor(
     private var isDoubleTapCandidate = false    // Second DOWN received within window
     private var longPressFired = false          // Don't fire long-press twice
     private var scrollAccumulator = 0f          // Sub-notch scroll carry-over
+    private var subpixelX = 0f                  // Sub-pixel fractional accumulator
+    private var subpixelY = 0f
 
     // ── Tap / gesture thresholds ─────────────────────────────────────
     private companion object {
@@ -79,6 +81,8 @@ class TouchpadProcessor(
                 touchDownTime = now
                 longPressFired = false
                 scrollAccumulator = 0f
+                subpixelX = 0f
+                subpixelY = 0f
 
                 // Check if this DOWN falls inside the double-tap window
                 if (pendingTap && (now - pendingTapTime) <= DOUBLE_TAP_WINDOW_MS) {
@@ -109,6 +113,8 @@ class TouchpadProcessor(
                 if (remainingIdx < event.pointerCount) {
                     lastX = event.getX(remainingIdx)
                     lastY = event.getY(remainingIdx)
+                    subpixelX = 0f
+                    subpixelY = 0f
                 }
             }
 
@@ -205,9 +211,17 @@ class TouchpadProcessor(
         if (rawDx == 0f && rawDy == 0f) return
 
         if (maxFingers == 1 || isDragging) {
-            // 1 finger or drag → pointer movement.
+            // 1 finger or drag → pointer movement with sub-pixel accumulation.
             val (sx, sy) = sensitivityCurve.apply(rawDx, rawDy)
-            onEvent(InputEvent.MouseMove(sx, sy))
+            val targetX = sx + subpixelX
+            val targetY = sy + subpixelY
+            val sendX = kotlin.math.round(targetX).toInt()
+            val sendY = kotlin.math.round(targetY).toInt()
+            subpixelX = targetX - sendX
+            subpixelY = targetY - sendY
+            if (sendX != 0 || sendY != 0) {
+                onEvent(InputEvent.MouseMove(sendX.toFloat(), sendY.toFloat()))
+            }
         } else if (maxFingers >= 2) {
             // 2+ fingers → vertical scroll, notched by scrollSpeed.
             scrollAccumulator += rawDy
@@ -234,5 +248,7 @@ class TouchpadProcessor(
         pendingTap = false
         longPressFired = false
         scrollAccumulator = 0f
+        subpixelX = 0f
+        subpixelY = 0f
     }
 }

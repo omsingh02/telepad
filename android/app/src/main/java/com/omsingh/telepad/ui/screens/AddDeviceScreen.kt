@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -82,7 +83,9 @@ fun AddDeviceScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var showManualDialog by remember { mutableStateOf(false) }
 
-    pendingPairingFor?.let { onPairingNeeded(it) }
+    LaunchedEffect(pendingPairingFor) {
+        pendingPairingFor?.let { onPairingNeeded(it) }
+    }
 
     Scaffold(
         modifier = Modifier.windowInsetsPadding(WindowInsets.systemBars),

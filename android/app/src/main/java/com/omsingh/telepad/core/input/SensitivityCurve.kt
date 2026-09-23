@@ -19,7 +19,7 @@ import kotlin.math.sign
  */
 class SensitivityCurve(
     var baseSensitivity: Float = 1.6f,
-    var curve: AccelCurve = AccelCurve.MACOS
+    var curve: AccelCurve = AccelCurve.LINEAR
 ) {
 
     enum class AccelCurve {
@@ -87,7 +87,19 @@ class SensitivityCurve(
         return accelerated * direction
     }
 
-    /** Apply curve to both axes. Returns `(scaledDx, scaledDy)`. */
-    fun apply(dx: Float, dy: Float): Pair<Float, Float> =
-        apply(dx) to apply(dy)
+    /**
+     * Apply curve to both axes using combined velocity magnitude.
+     *
+     * Unlike per-axis application (which would make diagonal movements √2× faster
+     * than cardinal ones), this computes the speed from both axes, applies the
+     * non-linear curve to that combined magnitude, and scales both axes uniformly.
+     * This matches macOS, Windows EPP, and libinput behavior.
+     */
+    fun apply(dx: Float, dy: Float): Pair<Float, Float> {
+        val magnitude = kotlin.math.hypot(dx, dy)
+        if (magnitude == 0f) return 0f to 0f
+        val scaled = apply(magnitude)
+        val ratio = scaled / magnitude
+        return (dx * ratio) to (dy * ratio)
+    }
 }

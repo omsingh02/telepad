@@ -68,12 +68,19 @@ class MulticastDiscoveryService(private val context: Context) {
             try {
                 socket = MulticastSocket(null).apply {
                     reuseAddress = true
+                    broadcast = true
                     bind(InetSocketAddress(TELEPAD_PORT))
                 }
                 val group = InetAddress.getByName(MULTICAST_GROUP)
-                val wifiIface = pickWifiInterface()
-                socket.joinGroup(InetSocketAddress(group, TELEPAD_PORT), wifiIface)
-                Log.i(TAG, "Joined $MULTICAST_GROUP on ${wifiIface?.name ?: "default"}")
+                val ifaces = getDiscoveryInterfaces()
+                for (iface in ifaces) {
+                    try {
+                        socket.joinGroup(InetSocketAddress(group, TELEPAD_PORT), iface)
+                        Log.i(TAG, "Joined $MULTICAST_GROUP on ${iface.name}")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed joining group on ${iface.name}: ${e.message}")
+                    }
+                }
 
                 // Staggered initial announcements so the server hears us promptly.
                 launch {
@@ -120,7 +127,26 @@ class MulticastDiscoveryService(private val context: Context) {
                     this[0] = WIRE_DISCOVERY_PROBE
                     System.arraycopy(DISCOVERY_MAGIC, 0, this, 1, DISCOVERY_MAGIC.size)
                 }
-                socket.send(DatagramPacket(msg, msg.size, group, TELEPAD_PORT))
+                // Multicast
+                try {
+                    socket.send(DatagramPacket(msg, msg.size, group, TELEPAD_PORT))
+                } catch (_: Exception) {}
+                // Global broadcast
+                try {
+                    socket.send(DatagramPacket(msg, msg.size, InetAddress.getByName("255.255.255.255"), TELEPAD_PORT))
+                } catch (_: Exception) {}
+                // Directed broadcast on all local interfaces (e.g. ap0 hotspot 10.95.31.255)
+                try {
+                    for (iface in NetworkInterface.getNetworkInterfaces()) {
+                        if (!iface.isUp || iface.isLoopback) continue
+                        for (ia in iface.interfaceAddresses) {
+                            val bcast = ia.broadcast ?: continue
+                            try {
+                                socket.send(DatagramPacket(msg, msg.size, bcast, TELEPAD_PORT))
+                            } catch (_: Exception) {}
+                        }
+                    }
+                } catch (_: Exception) {}
             } catch (t: Throwable) {
                 Log.w(TAG, "probe send failed: ${t.message}")
             }
@@ -129,30 +155,34 @@ class MulticastDiscoveryService(private val context: Context) {
 
     private fun handleReply(buf: ByteArray, packet: DatagramPacket) {
         if (packet.length < 1) return
-        val payload = String(buf, 0, packet.length, Charsets.UTF_8)
+        val raw = if (packet.length > 1 && buf[0] == WIRE_DISCOVERY_REPLY) {
+            String(buf, 1, packet.length - 1, Charsets.UTF_8)
+        } else {
+            String(buf, 0, packet.length, Charsets.UTF_8)
+        }
         val host = packet.address.hostAddress ?: return
-        if (payload.startsWith(PONG_PREFIX)) {
-            val name = payload.removePrefix(PONG_PREFIX).take(64).trim()
+        if (raw.startsWith(PONG_PREFIX)) {
+            val name = raw.removePrefix(PONG_PREFIX).take(64).trim()
             val info = ServerInfo(name = name.ifBlank { host }, host = host, port = TELEPAD_PORT)
             _discoveredServers.update { current ->
                 if (current.any { it.host == host }) current else current + info
             }
+            Log.i(TAG, "Discovered server '$name' at $host")
         }
     }
 
     /**
-     * Pick the active Wi-Fi `NetworkInterface` for multicast binding.
-     * On phones with concurrent cellular, the default route may not be Wi-Fi,
-     * which would cause multicast to land on the wrong radio.
+     * Get candidate network interfaces for multicast discovery.
+     * Includes all active, non-loopback interfaces with IPv4 addresses.
      */
-    private fun pickWifiInterface(): NetworkInterface? {
+    private fun getDiscoveryInterfaces(): List<NetworkInterface> {
         return try {
             NetworkInterface.getNetworkInterfaces().toList()
-                .firstOrNull { iface ->
-                    iface.isUp && !iface.isLoopback && iface.supportsMulticast() &&
+                .filter { iface ->
+                    iface.isUp && !iface.isLoopback &&
                     iface.inetAddresses.toList().any { it is Inet4Address && !it.isLoopbackAddress }
                 }
-        } catch (_: Exception) { null }
+        } catch (_: Exception) { emptyList() }
     }
 
     private companion object {
@@ -162,6 +192,7 @@ class MulticastDiscoveryService(private val context: Context) {
         const val LISTEN_TIMEOUT_MS = 6000
         const val PONG_PREFIX = "TELEPAD_PONG:"
         const val WIRE_DISCOVERY_PROBE: Byte = 0xC3.toByte()
+        const val WIRE_DISCOVERY_REPLY: Byte = 0xC4.toByte()
         const val MULTICAST_LOCK_TAG = "Telepad:MulticastDiscovery"
         val DISCOVERY_MAGIC = byteArrayOf(
             0x54, 0xE7.toByte(), 0x9A.toByte(), 0x03,

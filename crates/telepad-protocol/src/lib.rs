@@ -11,7 +11,8 @@ pub const WIRE_PAIRING_INTRO_RESP: u8 = 0xC6;
 
 pub const TELEPAD_PORT: u16 = 5000;
 pub const TELEPAD_MULTICAST_GROUP: &str = "239.255.42.67";
-pub const TELEPAD_DISCOVERY_MAGIC: &[u8; 8] = b"TELEPAD!";
+pub const TELEPAD_DISCOVERY_MAGIC: &[u8; 8] = &[0x54, 0xE7, 0x9A, 0x03, 0x21, 0xC8, 0xBE, 0xFE];
+pub const TELEPAD_DISCOVERY_MAGIC_ALT: &[u8; 8] = b"TELEPAD!";
 
 pub const MSG_TYPE_MOUSE_MOVE: u8 = 0x01;
 pub const MSG_TYPE_MOUSE_BUTTON: u8 = 0x02;

@@ -76,7 +76,6 @@ fun PairingScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.systemBars)
             .padding(Dimens.ScreenHorizontalPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -117,7 +116,7 @@ fun PairingScreen(
             when (val s = state) {
                 is PairingViewModel.State.Loading -> LoadingContent(server)
                 is PairingViewModel.State.Ready   -> FingerprintContent(s)
-                is PairingViewModel.State.Error   -> ErrorContent(s.message)
+                is PairingViewModel.State.Error   -> ErrorContent(s.message, onRetry = { viewModel.beginPairing(server) })
                 else -> LoadingContent(server)
             }
         }
@@ -212,7 +211,7 @@ private fun FingerprintContent(ready: PairingViewModel.State.Ready) {
 }
 
 @Composable
-private fun ErrorContent(message: String) {
+private fun ErrorContent(message: String, onRetry: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Dimens.ItemSpacing),
@@ -234,5 +233,12 @@ private fun ErrorContent(message: String) {
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = onRetry,
+            shape = RoundedCornerShape(Dimens.ButtonCornerRadius),
+        ) {
+            Text("Retry")
+        }
     }
 }

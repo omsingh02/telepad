@@ -32,6 +32,9 @@ import com.omsingh.telepad.ui.theme.StatusOffline
 import com.omsingh.telepad.ui.theme.StatusOnline
 import com.omsingh.telepad.ui.theme.StatusWarning
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+
 /**
  * Persistent thin bar at the top of every non-home screen.
  *
@@ -58,8 +61,9 @@ fun StatusBar(
         modifier = modifier
             .fillMaxWidth()
             .height(Dimens.StatusBarHeight)
+            .clip(RoundedCornerShape(Dimens.ChipCornerRadius))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(horizontal = Dimens.ScreenHorizontalPadding),
+            .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(

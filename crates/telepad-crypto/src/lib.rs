@@ -211,11 +211,8 @@ impl IdentityStore {
     }
 
     pub fn derive_public_key(priv_key: &[u8; 32]) -> Result<[u8; 32], CryptoError> {
-        let builder = Builder::new(NOISE_PATTERN.parse()?);
-        let keypair = builder.local_private_key(priv_key).generate_keypair()?;
-        let mut pub_key = [0u8; 32];
-        pub_key.copy_from_slice(&keypair.public);
-        Ok(pub_key)
+        let point = curve25519_dalek::montgomery::MontgomeryPoint::mul_base_clamped(*priv_key);
+        Ok(point.0)
     }
 
     #[cfg(windows)]
@@ -371,5 +368,15 @@ mod tests {
         assert_eq!(fp.chars().count(), 18);
         assert_eq!(fp.len(), 20);
         assert!(fp.contains('\u{00B7}'));
+    }
+
+    #[test]
+    fn test_derive_public_key_matches_snow() {
+        let builder = Builder::new(NOISE_PATTERN.parse().unwrap());
+        let kp = builder.generate_keypair().unwrap();
+        let mut priv_key = [0u8; 32];
+        priv_key.copy_from_slice(&kp.private);
+        let derived = IdentityStore::derive_public_key(&priv_key).unwrap();
+        assert_eq!(derived.as_slice(), kp.public.as_slice());
     }
 }

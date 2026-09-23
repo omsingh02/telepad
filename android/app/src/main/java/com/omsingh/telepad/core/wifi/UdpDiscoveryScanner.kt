@@ -106,7 +106,11 @@ class UdpDiscoveryScanner(private val context: Context) {
             socket.receive(rp)
 
             // Any PONG-shaped reply is a hit. Parse the hostname for display.
-            val payload = String(rxBuf, 0, rp.length, Charsets.UTF_8)
+            val payload = if (rp.length > 1 && rxBuf[0] == WIRE_DISCOVERY_REPLY) {
+                String(rxBuf, 1, rp.length - 1, Charsets.UTF_8)
+            } else {
+                String(rxBuf, 0, rp.length, Charsets.UTF_8)
+            }
             if (payload.startsWith(PONG_PREFIX)) {
                 val name = payload.removePrefix(PONG_PREFIX).take(64).trim()
                 if (name.isNotBlank() && name != ip) {
@@ -129,10 +133,9 @@ class UdpDiscoveryScanner(private val context: Context) {
         try {
             for (iface in NetworkInterface.getNetworkInterfaces()) {
                 if (iface.isLoopback || !iface.isUp || iface.isPointToPoint) continue
-                // Skip non-Wi-Fi interfaces by name. Names vary by OEM but these
-                // patterns cover ~99% of devices.
+                // Include Wi-Fi, Hotspot (ap/swlan), and USB tethering interfaces.
                 val n = iface.name.lowercase()
-                if (!(n.startsWith("wlan") || n.startsWith("wifi") || n == "wlp2s0")) continue
+                if (!(n.startsWith("wlan") || n.startsWith("wifi") || n.startsWith("ap") || n.startsWith("swlan") || n.startsWith("rndis") || n.startsWith("usb") || n == "wlp2s0")) continue
 
                 for (addr in iface.inetAddresses) {
                     if (addr is Inet4Address && !addr.isLoopbackAddress) {
@@ -183,6 +186,7 @@ class UdpDiscoveryScanner(private val context: Context) {
         const val MAX_PARALLEL_PROBES = 32
         const val PONG_PREFIX = "TELEPAD_PONG:"
         const val WIRE_DISCOVERY_PROBE: Byte = 0xC3.toByte()
+        const val WIRE_DISCOVERY_REPLY: Byte = 0xC4.toByte()
         val DISCOVERY_MAGIC = byteArrayOf(
             0x54, 0xE7.toByte(), 0x9A.toByte(), 0x03,
             0x21, 0xC8.toByte(), 0xBE.toByte(), 0xFE.toByte()

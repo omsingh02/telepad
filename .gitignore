@@ -53,3 +53,15 @@ coverage/
 *.gcov
 *.gcda
 *.gcno
+
+# Testing & temporary captures
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+**/.android_agent_state.json
+**/_android_agent_dump.xml
+**/_screencap.png
+*.pdb
+*.dmp
+*.bak

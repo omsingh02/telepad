@@ -22,8 +22,8 @@ data class UserPreferences(
     val longPressRightClick: Boolean = true,
     val sensitivity: Float = 1.6f,
     val scrollSpeed: Float = 2.2f,
-    val accelerationCurve: AccelerationCurve = AccelerationCurve.MACOS,
-    val showTouchpadButtons: Boolean = false,
+    val accelerationCurve: AccelerationCurve = AccelerationCurve.LINEAR,
+    val showTouchpadButtons: Boolean = true,
 
     // ── Keyboard ─────────────────────────────────────────────────────
     val clipboardSync: Boolean = true,
@@ -37,7 +37,7 @@ data class UserPreferences(
     // ── Appearance ───────────────────────────────────────────────────
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** Use Material You dynamic color on Android 12+. */
-    val dynamicColor: Boolean = true,
+    val dynamicColor: Boolean = false,
     val accentColor: AccentColor = AccentColor.CYAN,
 
     // ── Feedback ─────────────────────────────────────────────────────

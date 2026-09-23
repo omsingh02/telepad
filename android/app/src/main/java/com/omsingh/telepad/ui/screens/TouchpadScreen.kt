@@ -9,13 +9,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -40,6 +37,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.omsingh.telepad.core.input.ConnectionState
 import com.omsingh.telepad.core.input.InputEvent
 import com.omsingh.telepad.core.input.SensitivityCurve
 import com.omsingh.telepad.core.input.TouchpadProcessor
@@ -51,36 +49,48 @@ import com.omsingh.telepad.ui.theme.Dimens
 import com.omsingh.telepad.ui.theme.TrackpadBorderDark
 import com.omsingh.telepad.ui.theme.TrackpadSurfaceDark
 import com.omsingh.telepad.viewmodel.MainViewModel
+import com.omsingh.telepad.viewmodel.SettingsViewModel
 
 /**
- * Main touchpad surface.
- *
- * Architecture:
- *  - Raw [MotionEvent]s flow through `pointerInteropFilter` (lowest-latency
- *    raw-event API in Compose) directly into the [TouchpadProcessor].
- *  - [TouchpadProcessor] synchronously emits [InputEvent]s to the ViewModel.
- *  - No batching, no main-thread Handler. Touch hardware rate caps dispatch.
- *
- * Visual feedback: border tints to accent color while a finger is down,
- * giving the user immediate confirmation that input is being received.
- *
- * First-launch coach mark is rendered on top via [TouchpadIntroOverlay].
- * It dismisses on tap and persists in [UserPreferences] via a hoist to the
- * caller (we don't persist directly here — separation of concerns).
- *
- * Optional left/right click buttons under the pad — hidden by default,
- * shown via the `showTouchpadButtons` preference for accessibility users.
+ * Route composable: collects state and delegates to stateless [TouchpadScreen].
+ */
+@Composable
+fun TouchpadRoute(
+    mainViewModel: MainViewModel,
+    settingsViewModel: SettingsViewModel,
+    introShown: Boolean,
+    onIntroDismissed: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val connectionState by mainViewModel.connectionState.collectAsState()
+    val preferences by settingsViewModel.preferences.collectAsState()
+
+    TouchpadScreen(
+        connectionState = connectionState,
+        preferences = preferences,
+        introShown = introShown,
+        onIntroDismissed = onIntroDismissed,
+        onDisconnect = mainViewModel::disconnect,
+        onInputEvent = mainViewModel::onInputEvent,
+        modifier = modifier,
+    )
+}
+
+/**
+ * Main touchpad surface — clean, stateless, and responsive.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun TouchpadScreen(
-    viewModel: MainViewModel,
+    connectionState: ConnectionState,
     preferences: UserPreferences,
     introShown: Boolean,
     onIntroDismissed: () -> Unit,
+    onDisconnect: () -> Unit,
+    onInputEvent: (InputEvent) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
-    val connectionState by viewModel.connectionState.collectAsState()
     var isPressed by remember { mutableStateOf(false) }
     val currentHaptic by rememberUpdatedState(preferences.hapticFeedback)
 
@@ -96,7 +106,7 @@ fun TouchpadScreen(
                 }
                 else -> Unit
             }
-            viewModel.onInputEvent(event)
+            onInputEvent(event)
         })
     }
 
@@ -123,18 +133,23 @@ fun TouchpadScreen(
     )
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.systemBars),
+            .background(MaterialTheme.colorScheme.background),
     ) {
-        StatusBar(state = connectionState, onDisconnect = { viewModel.disconnect() })
+        if (connectionState is ConnectionState.Connected) {
+            StatusBar(
+                state = connectionState,
+                onDisconnect = onDisconnect,
+                modifier = Modifier.padding(horizontal = Dimens.ScreenHorizontalPadding, vertical = 6.dp),
+            )
+        }
 
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxSize()
-                .padding(Dimens.ScreenHorizontalPadding)
+                .padding(horizontal = Dimens.ScreenHorizontalPadding, vertical = 4.dp)
                 .background(TrackpadSurfaceDark, RoundedCornerShape(Dimens.TouchpadCornerRadius))
                 .border(Dimens.TouchpadBorderWidth, borderColor, RoundedCornerShape(Dimens.TouchpadCornerRadius))
                 .semantics {
@@ -156,11 +171,14 @@ fun TouchpadScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(Dimens.ScreenHorizontalPadding),
+                    .padding(horizontal = Dimens.ScreenHorizontalPadding, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(Dimens.ItemSpacingSmall),
             ) {
                 Button(
-                    onClick = { viewModel.onInputEvent(InputEvent.Click) },
+                    onClick = {
+                        if (currentHaptic) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onInputEvent(InputEvent.Click)
+                    },
                     modifier = Modifier
                         .weight(1f)
                         .height(52.dp),
@@ -171,7 +189,10 @@ fun TouchpadScreen(
                     shape = RoundedCornerShape(Dimens.ButtonCornerRadius),
                 ) { Text("Left click") }
                 Button(
-                    onClick = { viewModel.onInputEvent(InputEvent.RightClick) },
+                    onClick = {
+                        if (currentHaptic) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onInputEvent(InputEvent.RightClick)
+                    },
                     modifier = Modifier
                         .weight(1f)
                         .height(52.dp),
@@ -184,17 +205,16 @@ fun TouchpadScreen(
             }
         }
 
-        Spacer(Modifier.height(8.dp))
         Text(
             text = "1 finger: drag to move • Tap: click • 2 fingers: scroll & right-click",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = Dimens.ScreenHorizontalPadding),
+                .padding(horizontal = Dimens.ScreenHorizontalPadding, vertical = 4.dp),
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(Dimens.ScreenVerticalPadding))
+        Spacer(Modifier.height(4.dp))
     }
 
     TouchpadIntroOverlay(

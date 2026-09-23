@@ -55,7 +55,7 @@ class PairingViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             val pubkey = withContext(Dispatchers.IO) { fetchServerPubkey(server) }
             _state.value = if (pubkey == null) {
-                State.Error(server, "Could not reach $server.host. Is the PC app running?")
+                State.Error(server, "Could not reach ${server.host}. Is the PC app running?")
             } else {
                 val rawHex = Fingerprint.ofBase64(pubkey)
                 State.Ready(

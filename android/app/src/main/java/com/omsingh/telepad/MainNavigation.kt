@@ -28,12 +28,16 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.omsingh.telepad.core.wifi.ServerInfo
 import com.omsingh.telepad.ui.screens.AddDeviceScreen
+import com.omsingh.telepad.ui.screens.ControlsRoute
 import com.omsingh.telepad.ui.screens.ControlsScreen
+import com.omsingh.telepad.ui.screens.HomeRoute
 import com.omsingh.telepad.ui.screens.HomeScreen
+import com.omsingh.telepad.ui.screens.KeyboardRoute
 import com.omsingh.telepad.ui.screens.KeyboardScreen
 import com.omsingh.telepad.ui.screens.OnboardingScreen
 import com.omsingh.telepad.ui.screens.PairingScreen
 import com.omsingh.telepad.ui.screens.TouchpadCalibrationScreen
+import com.omsingh.telepad.ui.screens.TouchpadRoute
 import com.omsingh.telepad.ui.screens.TouchpadScreen
 import com.omsingh.telepad.ui.screens.settings.AboutScreen
 import com.omsingh.telepad.ui.screens.settings.AppearanceSettingsScreen
@@ -121,11 +125,11 @@ fun TelepadNavHost(
             }
 
             composable(Routes.HOME) {
-                HomeScreen(
+                HomeRoute(
                     viewModel = mainViewModel,
                     onNavigateToTouchpad = { nav.navigate(Routes.TOUCHPAD) },
                     onNavigateToAddDevice = { nav.navigate(Routes.ADD_DEVICE) },
-                    onPairingNeeded = { server -> pendingPairing = server }
+                    onPairingNeeded = { server -> pendingPairing = server },
                 )
             }
 
@@ -135,12 +139,12 @@ fun TelepadNavHost(
                     bluetoothGranted = bluetoothGranted,
                     onRequestBluetooth = onRequestBluetooth,
                     onBack = { nav.popBackStack() },
-                    onPairingNeeded = { server -> pendingPairing = server }
+                    onPairingNeeded = { server -> pendingPairing = server },
                 )
             }
 
             composable(Routes.PAIRING) {
-                val target = mainViewModel.pendingPairingFor.collectAsState().value
+                val target = remember { mainViewModel.pendingPairingFor.value }
                 if (target != null) {
                     PairingScreen(
                         server = target,
@@ -148,32 +152,33 @@ fun TelepadNavHost(
                         onTrust = { srv, pub ->
                             mainViewModel.completePairingAndConnect(srv, pub)
                             pairingViewModel.reset()
-                            nav.popBackStack(Routes.HOME, false)
-                            nav.navigate(Routes.TOUCHPAD)
+                            nav.navigate(Routes.TOUCHPAD) {
+                                popUpTo(Routes.HOME) { inclusive = false }
+                            }
                         },
                         onCancel = {
                             mainViewModel.cancelPairing()
                             nav.popBackStack()
-                        }
+                        },
                     )
                 } else {
-                    // Should not happen — guarded above.
-                    nav.popBackStack()
+                    LaunchedEffect(Unit) {
+                        nav.popBackStack()
+                    }
                 }
             }
 
             composable(Routes.TOUCHPAD) {
-                val prefs = settingsViewModel.preferences.collectAsState().value
-                TouchpadScreen(
-                    viewModel = mainViewModel,
-                    preferences = prefs,
+                TouchpadRoute(
+                    mainViewModel = mainViewModel,
+                    settingsViewModel = settingsViewModel,
                     introShown = introShown,
                     onIntroDismissed = onIntroDismissed,
                 )
             }
 
-            composable(Routes.KEYBOARD) { KeyboardScreen(viewModel = mainViewModel) }
-            composable(Routes.CONTROLS) { ControlsScreen(viewModel = mainViewModel) }
+            composable(Routes.KEYBOARD) { KeyboardRoute(viewModel = mainViewModel) }
+            composable(Routes.CONTROLS) { ControlsRoute(viewModel = mainViewModel) }
 
             composable(Routes.SETTINGS) {
                 SettingsScreen(onNavigate = { dest ->
