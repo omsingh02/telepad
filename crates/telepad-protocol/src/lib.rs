@@ -45,6 +45,8 @@ pub enum ProtocolError {
     InvalidUtf8(#[from] std::string::FromUtf8Error),
     #[error("Unknown enum value {0}")]
     InvalidEnumValue(u8),
+    #[error("Payload exceeds maximum size: {size} > {max}")]
+    PayloadTooLarge { size: usize, max: usize },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,7 +177,7 @@ pub enum ClientMessage {
 }
 
 impl ClientMessage {
-    pub fn encode(&self, buf: &mut BytesMut) {
+    pub fn encode(&self, buf: &mut BytesMut) -> Result<(), ProtocolError> {
         match self {
             Self::MouseMove { dx, dy } => {
                 buf.put_u8(MSG_TYPE_MOUSE_MOVE);
@@ -202,8 +204,14 @@ impl ClientMessage {
                 buf.put_u8(*mods);
             }
             Self::TextInput(text) => {
-                buf.put_u8(MSG_TYPE_TEXT_INPUT);
                 let bytes = text.as_bytes();
+                if bytes.len() > u16::MAX as usize {
+                    return Err(ProtocolError::PayloadTooLarge {
+                        size: bytes.len(),
+                        max: u16::MAX as usize,
+                    });
+                }
+                buf.put_u8(MSG_TYPE_TEXT_INPUT);
                 buf.put_u16_le(bytes.len() as u16);
                 buf.put_slice(bytes);
             }
@@ -222,8 +230,14 @@ impl ClientMessage {
                 buf.put_u8(MSG_TYPE_CLIPBOARD_GET);
             }
             Self::ClipboardSet(text) => {
-                buf.put_u8(MSG_TYPE_CLIPBOARD_SET);
                 let bytes = text.as_bytes();
+                if bytes.len() > u16::MAX as usize {
+                    return Err(ProtocolError::PayloadTooLarge {
+                        size: bytes.len(),
+                        max: u16::MAX as usize,
+                    });
+                }
+                buf.put_u8(MSG_TYPE_CLIPBOARD_SET);
                 buf.put_u16_le(bytes.len() as u16);
                 buf.put_slice(bytes);
             }
@@ -235,6 +249,7 @@ impl ClientMessage {
                 buf.put_u8(MSG_TYPE_NOW_PLAYING_Q);
             }
         }
+        Ok(())
     }
 
     pub fn decode(mut buf: &[u8]) -> Result<Self, ProtocolError> {
@@ -340,13 +355,20 @@ pub enum ServerMessage {
 }
 
 impl ServerMessage {
-    pub fn encode(&self, buf: &mut BytesMut) {
+    pub fn encode(&self, buf: &mut BytesMut) -> Result<(), ProtocolError> {
         match self {
             Self::ClipboardData(text) => {
-                buf.put_u8(MSG_TYPE_CLIPBOARD_DATA);
                 let bytes = text.as_bytes();
+                if bytes.len() > u16::MAX as usize {
+                    return Err(ProtocolError::PayloadTooLarge {
+                        size: bytes.len(),
+                        max: u16::MAX as usize,
+                    });
+                }
+                buf.put_u8(MSG_TYPE_CLIPBOARD_DATA);
                 buf.put_u16_le(bytes.len() as u16);
                 buf.put_slice(bytes);
+                Ok(())
             }
             Self::NowPlaying(state) => {
                 buf.put_u8(MSG_TYPE_NOW_PLAYING);
@@ -354,16 +376,34 @@ impl ServerMessage {
                 if state.is_playing {
                     flags |= 0x01;
                 }
+                if state.title.is_some() {
+                    flags |= 0x02;
+                }
+                if state.artist.is_some() {
+                    flags |= 0x04;
+                }
+                if state.album.is_some() {
+                    flags |= 0x08;
+                }
+                if state.source_app.is_some() {
+                    flags |= 0x10;
+                }
                 buf.put_u8(flags);
                 buf.put_i64_le(state.position_ms.unwrap_or(-1));
                 buf.put_i64_le(state.duration_ms.unwrap_or(-1));
 
                 let encode_str = |b: &mut BytesMut, s: &Option<String>| {
                     if let Some(str_val) = s {
-                        let str_bytes = str_val.as_bytes();
-                        let l = str_bytes.len().min(255) as u8;
-                        b.put_u8(l);
-                        b.put_slice(&str_bytes[..l as usize]);
+                        if str_val.is_empty() {
+                            b.put_u8(0);
+                        } else {
+                            let mut end = str_val.len().min(255);
+                            while !str_val.is_char_boundary(end) {
+                                end -= 1;
+                            }
+                            b.put_u8(end as u8);
+                            b.put_slice(&str_val.as_bytes()[..end]);
+                        }
                     } else {
                         b.put_u8(0);
                     }
@@ -373,6 +413,7 @@ impl ServerMessage {
                 encode_str(buf, &state.artist);
                 encode_str(buf, &state.album);
                 encode_str(buf, &state.source_app);
+                Ok(())
             }
         }
     }
@@ -400,16 +441,20 @@ impl ServerMessage {
                 }
                 let flags = buf.get_u8();
                 let is_playing = (flags & 0x01) != 0;
+                let title_present = (flags & 0x02) != 0;
+                let artist_present = (flags & 0x04) != 0;
+                let album_present = (flags & 0x08) != 0;
+                let source_app_present = (flags & 0x10) != 0;
                 let pos = buf.get_i64_le();
                 let dur = buf.get_i64_le();
 
-                let read_str = |b: &mut &[u8]| -> Result<Option<String>, ProtocolError> {
+                let read_str = |b: &mut &[u8], present: bool| -> Result<Option<String>, ProtocolError> {
                     if b.is_empty() {
-                        return Ok(None);
+                        return Ok(if present { Some(String::new()) } else { None });
                     }
                     let l = b.get_u8() as usize;
                     if l == 0 {
-                        return Ok(None);
+                        return Ok(if present { Some(String::new()) } else { None });
                     }
                     if b.len() < l {
                         return Err(ProtocolError::BufferTooShort { expected: l, actual: b.len() });
@@ -419,10 +464,10 @@ impl ServerMessage {
                     Ok(Some(s))
                 };
 
-                let title = read_str(&mut buf)?;
-                let artist = read_str(&mut buf)?;
-                let album = read_str(&mut buf)?;
-                let source_app = read_str(&mut buf)?;
+                let title = read_str(&mut buf, title_present)?;
+                let artist = read_str(&mut buf, artist_present)?;
+                let album = read_str(&mut buf, album_present)?;
+                let source_app = read_str(&mut buf, source_app_present)?;
 
                 Ok(Self::NowPlaying(NowPlayingState {
                     is_playing,
@@ -447,7 +492,7 @@ mod tests {
     fn test_mouse_move_roundtrip() {
         let original = ClientMessage::MouseMove { dx: -125, dy: 450 };
         let mut buf = BytesMut::new();
-        original.encode(&mut buf);
+        original.encode(&mut buf).unwrap();
         let decoded = ClientMessage::decode(&buf).unwrap();
         assert_eq!(original, decoded);
     }
@@ -459,17 +504,77 @@ mod tests {
             pressed: true,
         };
         let mut buf = BytesMut::new();
-        original.encode(&mut buf);
+        original.encode(&mut buf).unwrap();
         let decoded = ClientMessage::decode(&buf).unwrap();
         assert_eq!(original, decoded);
+    }
+
+    #[test]
+    fn test_scroll_roundtrip() {
+        let original = ClientMessage::Scroll { delta: -120 };
+        let mut buf = BytesMut::new();
+        original.encode(&mut buf).unwrap();
+        let decoded = ClientMessage::decode(&buf).unwrap();
+        assert_eq!(original, decoded);
+    }
+
+    #[test]
+    fn test_key_press_and_release_roundtrip() {
+        let press = ClientMessage::KeyPress { keycode: 0x41, mods: modifiers::LCTRL | modifiers::LSHIFT };
+        let mut buf = BytesMut::new();
+        press.encode(&mut buf).unwrap();
+        let decoded = ClientMessage::decode(&buf).unwrap();
+        assert_eq!(press, decoded);
+
+        let release = ClientMessage::KeyRelease { keycode: 0x41, mods: 0 };
+        buf.clear();
+        release.encode(&mut buf).unwrap();
+        let decoded = ClientMessage::decode(&buf).unwrap();
+        assert_eq!(release, decoded);
     }
 
     #[test]
     fn test_text_input_roundtrip() {
         let original = ClientMessage::TextInput("Hello Telepad v2! \u{1F680}".into());
         let mut buf = BytesMut::new();
-        original.encode(&mut buf);
+        original.encode(&mut buf).unwrap();
         let decoded = ClientMessage::decode(&buf).unwrap();
+        assert_eq!(original, decoded);
+    }
+
+    #[test]
+    fn test_payload_too_large_rejected() {
+        let huge_text = "a".repeat(70000);
+        let msg = ClientMessage::TextInput(huge_text);
+        let mut buf = BytesMut::new();
+        assert!(matches!(msg.encode(&mut buf), Err(ProtocolError::PayloadTooLarge { .. })));
+    }
+
+    #[test]
+    fn test_all_control_messages_roundtrip() {
+        let msgs = [
+            ClientMessage::MediaCmd(MediaAction::PlayPause),
+            ClientMessage::VolumeCmd(VolumeDirection::Up),
+            ClientMessage::LockScreen,
+            ClientMessage::ClipboardGet,
+            ClientMessage::ClipboardSet("Copy text".into()),
+            ClientMessage::LaunchAction(SystemAction::TaskView),
+            ClientMessage::NowPlayingQuery,
+        ];
+        for msg in msgs {
+            let mut buf = BytesMut::new();
+            msg.encode(&mut buf).unwrap();
+            let decoded = ClientMessage::decode(&buf).unwrap();
+            assert_eq!(msg, decoded);
+        }
+    }
+
+    #[test]
+    fn test_clipboard_data_roundtrip() {
+        let original = ServerMessage::ClipboardData("Sync clipboard data \u{1F4CB}".into());
+        let mut buf = BytesMut::new();
+        original.encode(&mut buf).unwrap();
+        let decoded = ServerMessage::decode(&buf).unwrap();
         assert_eq!(original, decoded);
     }
 
@@ -485,8 +590,55 @@ mod tests {
             source_app: Some("Spotify".into()),
         });
         let mut buf = BytesMut::new();
-        original.encode(&mut buf);
+        original.encode(&mut buf).unwrap();
         let decoded = ServerMessage::decode(&buf).unwrap();
         assert_eq!(original, decoded);
+    }
+
+    #[test]
+    fn test_now_playing_some_empty_string_roundtrip() {
+        let original = ServerMessage::NowPlaying(NowPlayingState {
+            is_playing: false,
+            position_ms: None,
+            duration_ms: None,
+            title: Some("".into()),
+            artist: None,
+            album: Some("".into()),
+            source_app: None,
+        });
+        let mut buf = BytesMut::new();
+        original.encode(&mut buf).unwrap();
+        let ServerMessage::NowPlaying(decoded) = ServerMessage::decode(&buf).unwrap() else {
+            panic!("expected NowPlaying");
+        };
+        assert_eq!(decoded.title, Some("".to_string()));
+        assert_eq!(decoded.artist, None);
+        assert_eq!(decoded.album, Some("".to_string()));
+        assert_eq!(decoded.source_app, None);
+    }
+
+    #[test]
+    fn test_korean_now_playing_truncation_preserves_utf8() {
+        // "a" followed by 100 Korean characters (3 bytes each = 301 bytes)
+        let long_korean = format!("a{}", "\u{AC00}".repeat(100));
+        let original = ServerMessage::NowPlaying(NowPlayingState {
+            is_playing: true,
+            position_ms: Some(1000),
+            duration_ms: Some(2000),
+            title: Some(long_korean),
+            artist: Some("Artist".into()),
+            album: None,
+            source_app: None,
+        });
+        let mut buf = BytesMut::new();
+        original.encode(&mut buf).unwrap();
+        let ServerMessage::NowPlaying(decoded) = ServerMessage::decode(&buf).unwrap() else {
+            panic!("expected NowPlaying");
+        };
+        let decoded_title = decoded.title.unwrap();
+        assert!(decoded_title.len() <= 255);
+        assert!(decoded_title.starts_with('a'));
+        // Verify valid UTF-8 character boundary: string does not contain broken sequences
+        assert!(decoded_title.chars().all(|c| c == 'a' || c == '\u{AC00}'));
     }
 }

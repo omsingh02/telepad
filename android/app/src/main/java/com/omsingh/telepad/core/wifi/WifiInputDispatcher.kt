@@ -182,11 +182,15 @@ class WifiInputDispatcher(
     private fun flushPlain(sock: DatagramSocket, session: NoiseSession) {
         val ptLen = plain.position()
         if (ptLen == 0) return
-        val ctLen = session.encrypt(plain.array(), 0, ptLen, cipher, 0)
-        if (ctLen <= 0) return
+        val nonce = session.encrypt(plain.array(), 0, ptLen, cipher, 0)
+        if (nonce < 0L) return
+        val ctLen = ptLen + 16
         txBuf[0] = NoiseSession.WIRE_TRANSPORT
-        System.arraycopy(cipher, 0, txBuf, 1, ctLen)
-        txPacket.setData(txBuf, 0, 1 + ctLen)
+        for (i in 0 until 8) {
+            txBuf[1 + i] = ((nonce ushr (i * 8)) and 0xFFL).toByte()
+        }
+        System.arraycopy(cipher, 0, txBuf, 9, ctLen)
+        txPacket.setData(txBuf, 0, 9 + ctLen)
         try { sock.send(txPacket) } catch (t: Throwable) {
             Log.w(TAG, "send failed: ${t.message}")
         }
@@ -236,10 +240,14 @@ class WifiInputDispatcher(
             while (isActive) {
                 try {
                     sock.receive(rxPacket)
-                    if (rxPacket.length < 2) continue
+                    if (rxPacket.length < 25) continue
                     if (rxBuf[0] != NoiseSession.WIRE_TRANSPORT) continue
-                    val n = session.decrypt(rxBuf, 1, rxPacket.length - 1, plainBuf, 0)
-                    if (n < 1) continue  // auth failure — silently drop.
+                    var nonce = 0L
+                    for (i in 0 until 8) {
+                        nonce = nonce or ((rxBuf[1 + i].toLong() and 0xFFL) shl (i * 8))
+                    }
+                    val n = session.decrypt(nonce, rxBuf, 9, rxPacket.length - 9, plainBuf, 0)
+                    if (n < 1) continue  // auth failure / replay — silently drop.
                     onServerPacket(plainBuf, n)
                 } catch (_: Throwable) {
                     // Likely socket closed during disconnect — loop will exit naturally.

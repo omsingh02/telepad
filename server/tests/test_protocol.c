@@ -32,6 +32,15 @@ int main(void) {
     CHECK(MSG_TYPE_KEY_PRESS    == 0x04);
     CHECK(MSG_TYPE_KEY_RELEASE  == 0x05);
     CHECK(MSG_TYPE_TEXT_INPUT   == 0x06);
+    CHECK(MSG_TYPE_MEDIA_CMD    == 0x07);
+    CHECK(MSG_TYPE_VOLUME_CMD   == 0x08);
+    CHECK(MSG_TYPE_LOCK_SCREEN  == 0x09);
+    CHECK(MSG_TYPE_CLIPBOARD_GET == 0x0E);
+    CHECK(MSG_TYPE_CLIPBOARD_SET == 0x0F);
+    CHECK(MSG_TYPE_LAUNCH_ACTION == 0x10);
+    CHECK(MSG_TYPE_NOW_PLAYING_Q == 0x11);
+    CHECK(MSG_TYPE_CLIPBOARD_DATA == 0x80);
+    CHECK(MSG_TYPE_NOW_PLAYING   == 0x81);
 
     /* Discovery magic */
     CHECK(TELEPAD_DISCOVERY_MAGIC_LEN == 8);
@@ -45,8 +54,8 @@ int main(void) {
     CHECK(sizeof(MsgVolume)      == 2);
     CHECK(sizeof(MsgLaunch)      == 2);
 
-    /* Discovery group is administratively-scoped (239.x), not reserved (224.0.0.x) */
-    CHECK(strncmp(TELEPAD_MULTICAST_GROUP, "239.", 4) == 0);
+    /* Discovery group is administratively-scoped (239.x), exactly 239.255.42.67 */
+    CHECK(strcmp(TELEPAD_MULTICAST_GROUP, "239.255.42.67") == 0);
     CHECK(TELEPAD_PORT == 5000);
 
     printf("protocol layout: OK\n");

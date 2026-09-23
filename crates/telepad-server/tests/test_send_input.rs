@@ -1,4 +1,5 @@
 #[test]
+#[ignore = "requires interactive desktop and real input injection"]
 #[cfg(windows)]
 fn test_mouse_move_moves_cursor() {
     use std::mem::size_of;

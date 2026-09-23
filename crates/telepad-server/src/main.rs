@@ -243,17 +243,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             WIRE_TRANSPORT => {
-                // Decrypt under lock (needs mutable session.transport + last_seen update),
-                // but handle the message OUTSIDE the lock to avoid holding it during
-                // async I/O (clipboard/now-playing responses).
+                if packet.len() < 25 {
+                    debug!("Transport packet from {} too short: {} bytes", src, packet.len());
+                    continue;
+                }
+                let nonce = u64::from_le_bytes(packet[1..9].try_into().unwrap());
+                let ciphertext = &packet[9..];
                 let decoded = {
                     let mut state_guard = state.lock().await;
                     if let Some(session) = state_guard.clients.get_mut(&src) {
                         session.last_seen = Instant::now();
-                        match session.transport.decrypt(&packet[1..]) {
+                        match session.transport.decrypt(nonce, ciphertext) {
                             Ok(plaintext) => ClientMessage::decode(&plaintext).ok(),
                             Err(e) => {
-                                debug!("Transport decrypt error from {}: {}", src, e);
+                                debug!("Transport decrypt error from {} (nonce {}): {}", src, nonce, e);
                                 None
                             }
                         }
@@ -326,14 +329,17 @@ async fn handle_client_message(
                 if let Ok(text) = clipboard.get_text() {
                     let s_msg = ServerMessage::ClipboardData(text);
                     let mut p_buf = BytesMut::new();
-                    s_msg.encode(&mut p_buf);
-                    let mut state_guard = state.lock().await;
-                    if let Some(session) = state_guard.clients.get_mut(&src) {
-                        if let Ok(encrypted) = session.transport.encrypt(&p_buf) {
-                            let mut out = vec![WIRE_TRANSPORT];
-                            out.extend_from_slice(&encrypted);
-                            drop(state_guard); // release lock before async send
-                            let _ = socket.send_to(&out, src).await;
+                    if s_msg.encode(&mut p_buf).is_ok() {
+                        let mut state_guard = state.lock().await;
+                        if let Some(session) = state_guard.clients.get_mut(&src) {
+                            if let Ok((nonce, encrypted)) = session.transport.encrypt(&p_buf) {
+                                let mut out = Vec::with_capacity(1 + 8 + encrypted.len());
+                                out.push(WIRE_TRANSPORT);
+                                out.extend_from_slice(&nonce.to_le_bytes());
+                                out.extend_from_slice(&encrypted);
+                                drop(state_guard); // release lock before async send
+                                let _ = socket.send_to(&out, src).await;
+                            }
                         }
                     }
                 }
@@ -342,14 +348,17 @@ async fn handle_client_message(
         ClientMessage::NowPlayingQuery => {
             let s_msg = ServerMessage::NowPlaying(NowPlayingState::default());
             let mut p_buf = BytesMut::new();
-            s_msg.encode(&mut p_buf);
-            let mut state_guard = state.lock().await;
-            if let Some(session) = state_guard.clients.get_mut(&src) {
-                if let Ok(encrypted) = session.transport.encrypt(&p_buf) {
-                    let mut out = vec![WIRE_TRANSPORT];
-                    out.extend_from_slice(&encrypted);
-                    drop(state_guard); // release lock before async send
-                    let _ = socket.send_to(&out, src).await;
+            if s_msg.encode(&mut p_buf).is_ok() {
+                let mut state_guard = state.lock().await;
+                if let Some(session) = state_guard.clients.get_mut(&src) {
+                    if let Ok((nonce, encrypted)) = session.transport.encrypt(&p_buf) {
+                        let mut out = Vec::with_capacity(1 + 8 + encrypted.len());
+                        out.push(WIRE_TRANSPORT);
+                        out.extend_from_slice(&nonce.to_le_bytes());
+                        out.extend_from_slice(&encrypted);
+                        drop(state_guard); // release lock before async send
+                        let _ = socket.send_to(&out, src).await;
+                    }
                 }
             }
         }

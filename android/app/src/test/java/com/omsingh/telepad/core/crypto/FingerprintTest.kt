@@ -57,4 +57,13 @@ class FingerprintTest {
     fun `non-32-byte key throws`() {
         Fingerprint.of(ByteArray(31))
     }
+
+    @Test
+    fun `canonical cross-implementation test vectors`() {
+        val all42 = ByteArray(32) { 0x42.toByte() }
+        assertEquals("425E · D4E4 · A36B", Fingerprint.format(Fingerprint.of(all42)))
+
+        val range0to31 = ByteArray(32) { it.toByte() }
+        assertEquals("630D · CD29 · 66C4", Fingerprint.format(Fingerprint.of(range0to31)))
+    }
 }
