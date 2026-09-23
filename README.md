@@ -1,235 +1,232 @@
 <div align="center">
 
-# 📱 Telepad
+# Telepad
 
-**Ultra-low-latency Android touchpad and keyboard remote for PC over encrypted Wi-Fi (Noise IK) or driverless Bluetooth HID.**
+An Android app that turns your phone into a trackpad and keyboard for Windows over Wi-Fi or Bluetooth.
 
 [![CI Status](https://github.com/omsingh02/telepad/actions/workflows/ci.yml/badge.svg)](https://github.com/omsingh02/telepad/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/omsingh02/telepad?color=blue&label=release)](https://github.com/omsingh02/telepad/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Rust 1.80+](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
 [![Android API 28+](https://img.shields.io/badge/android-API%2028%2B-green.svg)](https://developer.android.com)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Android-blueviolet.svg)](#downloads)
 
-[Key Features](#-key-features) •
-[Architecture](#-architecture--protocol) •
-[Gesture Reference](#-touchpad-gestures--controls) •
-[Quick Start](#-quick-start) •
-[Building from Source](#-building-from-source) •
-[Troubleshooting](#-troubleshooting--faq)
+[Features](#features) •
+[Protocol & Architecture](#protocol--architecture) •
+[Gesture Mapping](#gesture-mapping) •
+[Quick Start](#quick-start) •
+[Building from Source](#building-from-source) •
+[Troubleshooting](#troubleshooting)
 
 </div>
 
 ---
 
-## ⚡ Overview
+## Overview
 
-**Telepad** turns your Android phone into an ultra-responsive, zero-driver trackpad, keyboard, and presentation remote for your PC. Engineered in **Rust** (desktop daemon) and **Kotlin / Jetpack Compose** (Android client), Telepad prioritizes microsecond input fidelity, cryptographic security, and privacy.
+Telepad consists of two components:
+1. **Android Client** (Kotlin / Jetpack Compose): Captures touch gestures, key presses, and media actions, then sends them over UDP or Bluetooth.
+2. **Desktop Server** (Rust): Receives UDP packets, decrypts them, and injects mouse and keyboard events directly into the Windows input queue via Win32 `SendInput`.
 
-- **Zero-Cloud & Privacy-First**: 100% peer-to-peer over your local area network (LAN) or Bluetooth. No accounts, no analytics, no external servers.
-- **Micro-Latency UDP Protocol**: Custom compact binary wire protocol over UDP with zero-allocation packet parsing and sub-pixel float accumulation, delivering **~3–8 ms median latency** over standard Wi-Fi.
-- **Noise IK Cryptography**: Mutually authenticated, end-to-end encrypted sessions using Curve25519, ChaCha20-Poly1305, and BLAKE2s.
-- **Trust-On-First-Use (TOFU)**: 12-character cryptographic fingerprint verification on initial connection. Subsequent connections pair silently and instantly.
-- **Driverless Bluetooth HID**: Native Android Bluetooth HID profile support — controls Windows, macOS, Linux, Android TV, and game consoles without installing any desktop software.
+### Connection Modes
 
----
-
-## 🚀 Downloads
-
-Download pre-built standalone binaries from [**GitHub Releases**](https://github.com/omsingh02/telepad/releases/latest):
-
-| Component | Target Platform | Architecture | Binary / Package |
-| :--- | :--- | :--- | :--- |
-| **Android Client** | Android 9.0+ (API 28+) | `arm64-v8a`, `armeabi-v7a`, `x86_64` | [`telepad-android-release.apk`](https://github.com/omsingh02/telepad/releases/latest) |
-| **Desktop Daemon** | Windows 10 / 11 | `x86_64` | [`telepad-server-windows-x86_64.exe`](https://github.com/omsingh02/telepad/releases/latest) |
-
-> **Note**: The desktop server is a single, zero-dependency, self-contained executable. No installation or runtime dependencies (like Visual C++ Redistributable or .NET) required.
+- **Wi-Fi Mode**:
+  - Uses UDP over LAN (default port `5000`).
+  - End-to-end encrypted using the **Noise IK** handshake (`Noise_IK_25519_ChaChaPoly_BLAKE2s`).
+  - Uses Trust-On-First-Use (TOFU): on the first connection, the client displays a 12-character fingerprint derived from the server's public key. Once verified, subsequent connections authenticate automatically.
+  - Automatic discovery via IPv4 multicast (`239.255.42.67:5000`) and subnet broadcasts.
+- **Bluetooth Mode**:
+  - Uses the Android `BluetoothHidDevice` API.
+  - The phone acts as a standard Bluetooth human interface device (mouse and keyboard).
+  - Does not require running the desktop server executable.
 
 ---
 
-## ✨ Key Features
+## Downloads
 
-### 🖱️ Touchpad & Mouse
-- **Multi-Touch Fluidity**: 60–120 Hz tracking with sub-pixel float accumulation for pixel-perfect cursor positioning.
-- **Customizable Ballistics**: Native host OS ballistics (`Linear`) by default, with switchable curves:
-  - `Linear`: 1:1 raw hardware-like mapping with velocity preservation.
-  - `Windows`: Dynamic polynomial curve matching standard Windows Enhanced Pointer Precision.
-  - `macOS`: Cubic acceleration curve calibrated for rapid multi-monitor travel.
-  - `Flat`: Zero acceleration for competitive gaming or drawing precision.
-- **Hardware Mouse Buttons**: Optional dedicated physical on-screen Left / Right click buttons for accessibility and precision dragging.
-- **Two-Finger Scrolling**: Smooth, momentum-based vertical scrolling with configurable *Natural* (inverted) and *Standard* directions.
+Standalone pre-built binaries are available under [**Releases**](https://github.com/omsingh02/telepad/releases/latest):
 
-### ⌨️ Keyboard & Input Clusters
-- **Full Modifier Row**: Persistent sticky toggles for <kbd>Ctrl</kbd>, <kbd>Shift</kbd>, <kbd>Alt</kbd>, and <kbd>Win</kbd>.
-- **Function Keys**: Toggleable <kbd>F1</kbd>–<kbd>F12</kbd> row, <kbd>Esc</kbd>, <kbd>Tab</kbd>, and <kbd>Caps Lock</kbd>.
-- **Navigation Cluster**: Dedicated inverted-T arrow keys, plus <kbd>Insert</kbd>, <kbd>Delete</kbd>, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>Page Up</kbd>, and <kbd>Page Down</kbd> (injected with Windows `KEYEVENTF_EXTENDEDKEY` semantics).
-- **Presentation Remote**: Large tactile tap zones for PowerPoint / Google Slides / Keynote (<kbd>Page Down</kbd> / <kbd>Page Up</kbd> / <kbd>B</kbd> black screen).
-- **Two-Way Clipboard Sync**: Seamless text clipboard transfer between mobile device and PC over encrypted channel.
-- **Live Media Controls & Metadata**: Windows Now Playing sync displaying active track title, artist, playback state, and media key injection (<kbd>Play/Pause</kbd>, <kbd>Next</kbd>, <kbd>Prev</kbd>, Volume slider).
-- **Quick Action Bar**: Instant one-tap triggers for <kbd>Copy</kbd>, <kbd>Paste</kbd>, <kbd>Cut</kbd>, <kbd>Undo</kbd>, <kbd>Redo</kbd>, <kbd>Alt+Tab</kbd>, <kbd>Show Desktop</kbd>, and <kbd>Task Manager</kbd>.
-
----
-
-## 🎯 Touchpad Gestures & Controls
-
-| Gesture | Action | Windows OS Equivalent |
+| Component | Target Platform | File |
 | :--- | :--- | :--- |
-| **One-finger move** | Pointer movement | `MOUSEEVENTF_MOVE` (with sub-pixel accumulation) |
-| **One-finger tap** | Left click | `MOUSEEVENTF_LEFTDOWN` + `UP` |
-| **Two-finger tap** | Right click | `MOUSEEVENTF_RIGHTDOWN` + `UP` |
-| **Double-tap & drag** | Click-and-drag / window move | Persistent `LEFTDOWN` until finger release |
-| **Two-finger vertical drag** | Smooth scroll wheel | `MOUSEEVENTF_WHEEL` (accumulator-based) |
-| **Long press** | Context menu (Right click) | `MOUSEEVENTF_RIGHTDOWN` + `UP` |
+| **Android Client** | Android 9.0+ (API 28+) | `telepad-android-release.apk` |
+| **Desktop Server** | Windows 10 / 11 (x86_64) | `telepad-server-windows-x86_64.exe` |
+
+The Windows server is a single portable executable with no external runtime dependencies.
 
 ---
 
-## 🏗️ Architecture & Protocol
+## Features
 
-Telepad avoids heavy application protocols (like VNC, RDP, or HTTP/WebSockets) in favor of a zero-allocation UDP protocol protected by the **Noise Protocol Framework**.
+### Mouse & Trackpad
+- **Tracking**: Motion delta tracking with sub-pixel float accumulation to avoid truncation errors on slow finger movement.
+- **Sensitivity Curves**:
+  - `Linear`: 1:1 direct mapping (default).
+  - `Windows`: Polynomial curve matching Windows Enhanced Pointer Precision.
+  - `macOS`: Cubic acceleration curve.
+  - `Flat`: Fixed sensitivity regardless of swipe speed.
+- **Gestures**:
+  - Single-finger move: cursor movement.
+  - Single-finger tap: left click.
+  - Two-finger tap: right click.
+  - Double-tap and drag: left click hold and drag.
+  - Two-finger drag: scroll wheel (supports natural/inverted toggle).
+  - Long press: right click.
+- **On-Screen Buttons**: Optional dedicated physical Left and Right click buttons.
+
+### Keyboard & Remote
+- **Modifier Keys**: Toggleable sticky modifiers (<kbd>Ctrl</kbd>, <kbd>Shift</kbd>, <kbd>Alt</kbd>, <kbd>Win</kbd>).
+- **Navigation Cluster**: Dedicated arrow keys, <kbd>Insert</kbd>, <kbd>Delete</kbd>, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>Page Up</kbd>, and <kbd>Page Down</kbd> injected with `KEYEVENTF_EXTENDEDKEY`.
+- **Function Row**: Toggleable <kbd>F1</kbd>–<kbd>F12</kbd>, <kbd>Esc</kbd>, <kbd>Tab</kbd>, and <kbd>Caps Lock</kbd>.
+- **Media Controls**: <kbd>Play/Pause</kbd>, <kbd>Next</kbd>, <kbd>Prev</kbd>, volume controls, and live Windows Now Playing metadata display (title, artist, album).
+- **Clipboard Sync**: Two-way text clipboard transfer between phone and PC over the encrypted Wi-Fi channel.
+- **Presentation Controls**: Large tap zones for <kbd>Page Up</kbd>, <kbd>Page Down</kbd>, and black screen (<kbd>B</kbd>).
+- **Quick Shortcuts**: One-tap triggers for Copy, Paste, Cut, Undo, Redo, Alt+Tab, Task View, and Show Desktop.
+
+---
+
+## Gesture Mapping
+
+| Gesture | Injected Win32 Input | Win32 Flags |
+| :--- | :--- | :--- |
+| **1-finger move** | Mouse move | `MOUSEEVENTF_MOVE` |
+| **1-finger tap** | Left click | `MOUSEEVENTF_LEFTDOWN` then `MOUSEEVENTF_LEFTUP` |
+| **2-finger tap** | Right click | `MOUSEEVENTF_RIGHTDOWN` then `MOUSEEVENTF_RIGHTUP` |
+| **Double-tap & hold** | Left drag | `MOUSEEVENTF_LEFTDOWN` held until finger release |
+| **2-finger vertical drag** | Scroll wheel | `MOUSEEVENTF_WHEEL` (multiplied by `WHEEL_DELTA = 120`) |
+| **Long press** | Right click | `MOUSEEVENTF_RIGHTDOWN` then `MOUSEEVENTF_RIGHTUP` |
+
+---
+
+## Protocol & Architecture
+
+Telepad uses a custom compact binary protocol over UDP.
 
 ```
 +---------------------------------------------------------------------------------+
-|                                 TELEPAD ARCHITECTURE                            |
+|                              CONNECTION LIFECYCLE                               |
 +---------------------------------------------------------------------------------+
 
    ANDROID CLIENT                                           WINDOWS SERVER (RUST)
-+-------------------+                                      +---------------------+
-|  Jetpack Compose  |                                      |   Tokio Async UDP   |
-|   Touch Handler   |                                      |   Listener (:5000)  |
-+---------+---------+                                      +----------+----------+
-          |                                                           |
-          | 1. Multicast Discovery (239.255.42.67:5000)               |
-          |---------------------------------------------------------->|
-          |    Tag 0xC3 (WIRE_DISCOVERY_PROBE) + 8B Magic Header      |
-          |                                                           |
-          | 2. Unicast / Multicast Discovery Response                 |
-          |<----------------------------------------------------------|
-          |    Tag 0xC4 (WIRE_DISCOVERY_REPLY) + "TELEPAD_PONG:<Host>"|
-          |                                                           |
-          | 3. Pairing Introduction (First connect only)              |
-          |---------------------------------------------------------->|
-          |    Tag 0xC5 (WIRE_PAIRING_INTRO_REQ)                      |
-          |<----------------------------------------------------------|
-          |    Tag 0xC6 (WIRE_PAIRING_INTRO_RESP) + 32B Static PubKey |
-          |                                                           |
-          |    [TOFU 12-char Fingerprint Check against SHA-256(Pub)]  |
-          |    e.g. "7F2A · B9C1 · 4E08" <---> Matches Host Console?  |
-          |                                                           |
-          | 4. Noise IK 2-Message Handshake                           |
-          |---------------------------------------------------------->|
-          |    Msg 1 (0xC0, 96B): e, es, s, ss                        |
-          |<----------------------------------------------------------|
-          |    Msg 2 (0xC1, 48B): e, ee, se                           |
-          |                                                           |
-          | 5. Encrypted Transport Stream (ChaCha20-Poly1305)         |
-          |==========================================================>|
-          |    Tag 0xC2 (WIRE_TRANSPORT) + [Ciphertext + 16B Poly1305]|
-          |    - MouseMove:    0x01 [i16 dx][i16 dy]                  |
-          |    - MouseButton:  0x02 [u8 button][u8 pressed]           |
-          |    - Scroll:       0x03 [i16 delta]                       |
-          |    - KeyPress:     0x04 [u16 keycode][u8 mods]            |
-          |    - MediaCmd:     0x07 [u8 action]                       |
-          |    - ClipboardSet: 0x0F [u16 len][utf8 bytes...]          |
-          |                                                           |
-          |                                                6. Win32 SendInput
-          |                                                   Cursor / Keystroke
-          +                                                           +
+         |                                                           |
+         | 1. Multicast Discovery (239.255.42.67:5000)               |
+         |---------------------------------------------------------->|
+         |    [0xC3][Magic: 8 bytes]                                 |
+         |                                                           |
+         | 2. Discovery Reply                                        |
+         |<----------------------------------------------------------|
+         |    [0xC4] + "TELEPAD_PONG:<Hostname>"                     |
+         |                                                           |
+         | 3. Pairing Request (First connection only)                |
+         |---------------------------------------------------------->|
+         |    [0xC5]                                                 |
+         |<----------------------------------------------------------|
+         |    [0xC6] + [32-byte X25519 static public key]            |
+         |                                                           |
+         |    [TOFU: Compare 12-char fingerprint against PC console] |
+         |                                                           |
+         | 4. Noise IK Handshake                                     |
+         |---------------------------------------------------------->|
+         |    Msg 1 [0xC0] + [96 bytes: e, es, s, ss]                |
+         |<----------------------------------------------------------|
+         |    Msg 2 [0xC1] + [48 bytes: e, ee, se]                   |
+         |                                                           |
+         | 5. Encrypted Transport Stream (ChaCha20-Poly1305)         |
+         |==========================================================>|
+         |    [0xC2] + [Encrypted payload + 16-byte Poly1305 tag]    |
+         |                                                           |
+         |                                                6. Win32 SendInput
+         +                                                           +
 ```
 
-### Protocol & Security Specifications
+### Protocol Specifications
+
 - **Cipher Suite**: `Noise_IK_25519_ChaChaPoly_BLAKE2s`
-  - **Key Exchange**: Curve25519 (ECDH)
-  - **Cipher**: ChaCha20 with Poly1305 16-byte MAC authentication
-  - **Hash**: BLAKE2s (256-bit)
-- **Handshake Flow**:
-  - `-> e, es, s, ss` (96 bytes): Initiator sends ephemeral key `e` and encrypted static public key `s`.
-  - `<- e, ee, se` (48 bytes): Responder sends ephemeral key `e` and completes mutual authentication.
-- **Fingerprint Calculation**: First 6 bytes of `SHA256(static_public_key)` formatted as uppercase hex pairs separated by dots (`XXYY · XXYY · XXYY`).
+  - DH: X25519
+  - Cipher: ChaCha20-Poly1305 (16-byte authentication tag)
+  - Hash: BLAKE2s
+- **Wire Framing** (first byte of every UDP datagram):
+  - `0xC0`: `WIRE_HANDSHAKE_INIT` (96 bytes)
+  - `0xC1`: `WIRE_HANDSHAKE_RESP` (48 bytes)
+  - `0xC2`: `WIRE_TRANSPORT` (encrypted payload)
+  - `0xC3`: `WIRE_DISCOVERY_PROBE` (magic: `0x54, 0xE7, 0x9A, 0x03, 0x21, 0xC8, 0xBE, 0xFE` or `b"TELEPAD!"`)
+  - `0xC4`: `WIRE_DISCOVERY_REPLY` (`"TELEPAD_PONG:<hostname>"`)
+  - `0xC5`: `WIRE_PAIRING_INTRO_REQ`
+  - `0xC6`: `WIRE_PAIRING_INTRO_RESP` (32 bytes public key)
+- **Transport Payload Framing** (inside encrypted stream):
+  - `0x01`: MouseMove (`[i16 dx][i16 dy]`, little-endian)
+  - `0x02`: MouseButton (`[u8 button][u8 pressed]`)
+  - `0x03`: Scroll (`[i16 delta]`)
+  - `0x04`: KeyPress (`[u16 keycode][u8 modifiers]`)
+  - `0x05`: KeyRelease (`[u16 keycode][u8 modifiers]`)
+  - `0x06`: TextInput (`[u16 len][utf-8 bytes]`)
+  - `0x07`: MediaCmd (`[u8 action]`)
+  - `0x08`: VolumeCmd (`[u8 direction]`)
+  - `0x09`: LockScreen
+  - `0x0E`: ClipboardGet
+  - `0x0F`: ClipboardSet (`[u16 len][utf-8 bytes]`)
+  - `0x10`: LaunchAction (`[u8 action]`)
+  - `0x11`: NowPlayingQuery
+  - `0x80`: ClipboardData (`[u16 len][utf-8 bytes]`)
+  - `0x81`: NowPlaying (`[flags][pos: i64][dur: i64][strings...]`)
+- **Fingerprint Calculation**:
+  - `SHA256(server_static_public_key)[0..6]` formatted as hex pairs: `XXYY · XXYY · XXYY`.
 - **Key Storage**:
-  - Windows: Stored in `%APPDATA%\Telepad\identity.key` (static secret) and `%APPDATA%\Telepad\trusted_clients.json`.
-  - Android: Stored in EncryptedSharedPreferences backed by hardware **Android Keystore**.
+  - Windows: `%APPDATA%\Telepad\identity.key` and `trusted_clients.json`.
+  - Android: `EncryptedSharedPreferences` backed by Android Keystore.
 
 ---
 
-## ⏱️ Latency Budget
+## Quick Start
 
-Telepad achieves an empirical glass-to-screen latency of **~3–8 ms** over 5 GHz Wi-Fi:
+### Wi-Fi Mode
 
-```
-[Touch Sensor Dispatch]    -->  1.0–4.0 ms (Android MotionEvent batching at 120–240 Hz)
-[Ballistics & Accumulator] -->  < 0.05 ms  (Sub-pixel floating-point remainder accumulation)
-[Zero-Alloc Wire Encode]   -->  < 0.01 ms  (Direct ByteBuffer LE binary serialization)
-[ChaCha20-Poly1305 AEAD]   -->  ~ 0.05 ms  (ARMv8 NEON SIMD encryption)
-[5 GHz Wi-Fi LAN Hop]      -->  1.5–3.5 ms (UDP packet transport, zero round-trips)
-[Tokio UDP Async Recv]     -->  < 0.05 ms  (Kernel epoll / IOCP socket dispatch)
-[ChaCha20-Poly1305 Decrypt]-->  ~ 0.05 ms  (x86_64 AVX2 decryption)
-[Win32 SendInput Dispatch] -->  ~ 0.15 ms  (Direct kernel input queue injection)
------------------------------------------------------------------------------------
-Total Glass-to-Screen:          ~ 3.0–8.0 ms
-```
-
----
-
-## 🏁 Quick Start
-
-### Wi-Fi Mode (Recommended)
-
-1. **Launch Desktop Server**:
-   Download and run `telepad-server-windows-x86_64.exe` on your Windows PC:
+1. **Start the Desktop Server**:
+   Run `telepad-server-windows-x86_64.exe` on your Windows PC:
    ```cmd
    telepad-server-windows-x86_64.exe
    ```
-   The server will print its identity and 12-character fingerprint:
+   The server will print its identity and fingerprint:
    ```
    ==================================================
     Telepad Desktop Server v2.0.0 (Rust)
     Port:        5000
-    Hostname:    DESKTOP-GAMING
+    Hostname:    DESKTOP-PC
     Fingerprint: 7F2A · B9C1 · 4E08
    ==================================================
    ```
 
-2. **Open Telepad on Android**:
-   - Ensure your phone is connected to the same Wi-Fi network.
-   - Discovered PCs appear automatically in the device list.
-   - Tap your PC name.
+2. **Connect from Android**:
+   - Connect phone to the same local network.
+   - Open Telepad. Discovered PCs appear in the list automatically.
+   - Tap your PC.
 
 3. **Verify Fingerprint (First Connection Only)**:
-   - Compare the 12-character fingerprint displayed on your phone with the server console.
-   - Tap **Trust this PC**. Subsequent connections will pair automatically.
+   - Check that the fingerprint on your phone matches the server console.
+   - Tap **Trust this PC**. Subsequent connections pair automatically.
 
-### Bluetooth HID Mode (Driverless)
+### Bluetooth Mode
 
-> **Hardware Requirement**: Bluetooth HID Device Profile (`BluetoothHidDevice`) requires Android 9.0+ and an OEM firmware build with HID Device support enabled (`profile_supported_hidd=true`).
+> **Requirement**: Android 9.0+ with firmware support for the Bluetooth HID Device profile (`BluetoothHidDevice`). Some OEM builds disable this profile in software.
 
 1. Open Android **Settings** $\rightarrow$ **Connected devices** $\rightarrow$ **Pair new device**.
-2. Put your PC in Bluetooth pairing mode.
-3. Open Telepad $\rightarrow$ Switch to **Bluetooth Mode** $\rightarrow$ Tap your paired PC.
-4. Your phone now functions as a generic Bluetooth keyboard and mouse. No desktop server executable needed!
+2. Put your PC into Bluetooth discovery mode and complete pairing from Android settings.
+3. Open Telepad $\rightarrow$ Switch to **Bluetooth Mode** $\rightarrow$ Tap your PC.
 
 ---
 
-## 💻 Building from Source
+## Building from Source
 
 ### Prerequisites
+- **Rust**: 1.80+ (`rustup toolchain install stable`)
+- **Android**: JDK 17+, Android SDK 35
 
-| Component | Requirements |
-| :--- | :--- |
-| **Desktop Daemon** | Rust 1.80+ (`rustup toolchain install stable`) |
-| **Android Client** | JDK 17+, Android SDK 35, Android Studio Ladybug or later |
-
-### 1. Build Desktop Daemon (Rust)
+### 1. Build Desktop Server (Rust)
 
 ```bash
-# Clone the repository
 git clone https://github.com/omsingh02/telepad.git
 cd telepad
 
-# Build optimized release binary
 cargo build --release --bin telepad-server
-
-# Target executable is located at:
-# target/release/telepad-server.exe
+# Executable: target/release/telepad-server.exe
 ```
 
 Run test suite:
@@ -255,47 +252,45 @@ cd android
 
 ---
 
-## 🔧 Troubleshooting & FAQ
+## Troubleshooting
 
-### PC not showing up in auto-discovery?
-1. **Windows Firewall**: Windows Firewall may prompt on first launch. If blocked, open PowerShell as Administrator and run:
+### PC not found during auto-discovery
+1. **Windows Firewall**: If Windows Firewall blocks UDP traffic, allow inbound UDP on port 5000:
    ```powershell
    New-NetFirewallRule -DisplayName "Telepad Server" -Direction Inbound -LocalPort 5000 -Protocol UDP -Action Allow
    ```
-2. **Same Subnet / Wi-Fi Isolation**: Verify that your phone and PC are on the same Wi-Fi network. Some guest networks or mesh routers enable "Client Isolation" which blocks peer-to-peer UDP broadcasts.
-3. **Manual Connection**: In Telepad on your phone, tap **Add Device Manually**, and enter your PC's local IP address (find it via `ipconfig` on Windows).
+2. **Access Point Isolation**: Some guest Wi-Fi networks and mesh routers block device-to-device UDP traffic.
+3. **Manual IP Connection**: Tap **Add Device Manually** in the app and enter your PC's local IP address directly (find it via `ipconfig` on Windows).
 
-### Cursor feels jerky or lags?
-- **Ballistics Curve**: Open Telepad Settings $\rightarrow$ **Sensitivity & Ballistics** and switch to `Linear` for raw 1:1 hardware tracking or `Windows` to match system acceleration.
-- **Sub-pixel Accumulation**: Telepad accumulates sub-pixel remainders to prevent truncation jitter. Ensure **Sub-pixel Smoothing** is enabled in Settings.
-- **Power Saving**: Disable battery optimization for Telepad on Android (`Settings` $\rightarrow$ `Apps` $\rightarrow$ `Telepad` $\rightarrow$ `Battery` $\rightarrow$ `Unrestricted`) to prevent OS CPU throttling during touch events.
+### Cursor feels jittery or lags
+- **Curve Selection**: Check Settings $\rightarrow$ **Sensitivity & Ballistics**. `Linear` provides 1:1 hardware movement without synthetic acceleration.
+- **Battery Optimization**: On Android, set Telepad battery usage to **Unrestricted** (`Settings` $\rightarrow$ `Apps` $\rightarrow$ `Telepad` $\rightarrow$ `Battery`) to prevent background thread throttling.
 
-### Fingerprint Mismatch warning?
-- If the server's private key was regenerated (e.g. server reinstalled on a new machine with the same hostname), the app warns of a fingerprint mismatch to protect against Man-in-the-Middle attacks.
-- Open **Settings** $\rightarrow$ **Paired Devices** $\rightarrow$ delete the old pairing $\rightarrow$ reconnect and verify the new fingerprint.
+### Fingerprint Mismatch Warning
+- If the server key was deleted or regenerated (e.g. server moved to a new machine with the same hostname), the app warns of a fingerprint mismatch to prevent Man-in-the-Middle attacks.
+- Open **Settings** $\rightarrow$ **Paired Devices** on your phone, delete the old server entry, and reconnect to trust the new key.
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 telepad/
 ├── android/                    # Android client (Kotlin + Jetpack Compose)
-│   ├── app/src/main/           # Touch UI, ViewModels, and Network/HID drivers
+│   ├── app/src/main/           # UI, ViewModels, and Network/HID drivers
 │   └── app/libs/               # Bundled Noise protocol library
-├── crates/                     # Modular Rust Desktop Daemon
-│   ├── telepad-server/         # Async Tokio server, Windows input injection (SendInput)
-│   ├── telepad-crypto/         # Noise IK handshake, ChaCha20-Poly1305, TOFU pairing
-│   └── telepad-protocol/       # Compact binary wire protocol and packet framing
-├── .agents/                    # Workspace automation skills and testing drivers
-│   └── skills/android-device-testing/  # Deterministic adb/uiautomator test suite
-├── Cargo.toml                  # Cargo workspace definition
+├── crates/                     # Rust Desktop Server Workspace
+│   ├── telepad-server/         # Tokio UDP listener, Win32 SendInput injection
+│   ├── telepad-crypto/         # Noise IK handshake, ChaCha20-Poly1305, key storage
+│   └── telepad-protocol/       # Binary wire protocol definitions and codecs
+├── .agents/                    # Automation and device testing scripts
+├── Cargo.toml                  # Cargo workspace
 └── README.md
 ```
 
 ---
 
-## 📜 License
+## License
 
 Distributed under the [MIT License](LICENSE).
 
