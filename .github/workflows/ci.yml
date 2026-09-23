@@ -3,12 +3,47 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '**.md'
+      - '.agents/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '**.md'
+      - '.agents/**'
 
 jobs:
+  changes:
+    name: Detect Changed Paths
+    runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.filter.outputs.android }}
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            android:
+              - 'android/**'
+              - '.github/workflows/ci.yml'
+            rust:
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/workflows/ci.yml'
+
   android:
     name: Android Build & Test
+    needs: changes
+    if: ${{ needs.changes.outputs.android == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +66,8 @@ jobs:
 
   rust:
     name: Rust Workspace (${{ matrix.os }})
+    needs: changes
+    if: ${{ needs.changes.outputs.rust == 'true' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -49,18 +86,3 @@ jobs:
         run: cargo test --workspace --verbose
       - name: Build Rust Server Release
         run: cargo build --release --bin telepad-server
-
-  server-c:
-    name: Legacy C Server (Windows)
-    runs-on: windows-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - name: Clone noise-c dependency
-        run: git clone https://github.com/rweather/noise-c server/third_party/noise-c
-      - name: Configure CMake
-        run: cmake -B server/build -S server
-      - name: Build Server
-        run: cmake --build server/build --config Release
-      - name: Run Server Tests
-        run: ctest --test-dir server/build -C Release --output-on-failure
