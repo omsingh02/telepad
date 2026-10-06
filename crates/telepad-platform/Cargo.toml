@@ -1,0 +1,46 @@
+[package]
+name = "telepad-platform"
+description = "OS integration layer for the Telepad desktop server: input injection, clipboard, network interfaces, config paths"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+telepad-protocol = { path = "../telepad-protocol" }
+thiserror.workspace = true
+tracing.workspace = true
+arboard.workspace = true
+if-addrs = "0.15"
+dirs = "7"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+nix = { version = "0.31", default-features = false, features = ["ioctl"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = [
+    "std",
+    "CGDirectDisplay",
+    "CGError",
+    "CGEvent",
+    "CGEventSource",
+    "CGEventTypes",
+    "CGRemoteOperation",
+] }
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSEvent",
+    "NSGraphicsContext",
+    "objc2-core-graphics",
+] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Foundation",
+    "Win32_System_SystemServices",
+    "Win32_System_Shutdown",
+    "Win32_UI_WindowsAndMessaging",
+] }

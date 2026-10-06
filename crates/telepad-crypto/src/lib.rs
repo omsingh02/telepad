@@ -29,17 +29,36 @@ pub enum CryptoError {
     ReplayDetected(u64),
 }
 
-/// Computes the 12-character display fingerprint: `"7F2A · B9C1 · 4E08"`
-/// matching the Android and C server implementations.
-pub fn compute_fingerprint(pubkey: &[u8; 32]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(pubkey);
-    let hash = hasher.finalize();
+/// Generates a fresh X25519 static keypair `(private, public)` for the Noise pattern.
+pub fn generate_keypair() -> Result<([u8; 32], [u8; 32]), CryptoError> {
+    let keypair = Builder::new(NOISE_PATTERN.parse()?).generate_keypair()?;
+    let mut private = [0u8; 32];
+    let mut public = [0u8; 32];
+    private.copy_from_slice(&keypair.private);
+    public.copy_from_slice(&keypair.public);
+    Ok((private, public))
+}
 
-    format!(
-        "{:02X}{:02X} \u{00B7} {:02X}{:02X} \u{00B7} {:02X}{:02X}",
-        hash[0], hash[1], hash[2], hash[3], hash[4], hash[5]
-    )
+/// How many bytes of the key's hash a fingerprint shows.
+const FINGERPRINT_BYTES: usize = 10;
+
+/// Computes the display fingerprint: the first 10 bytes of the SHA-256 of the public key, as
+/// five groups of four hex digits, `"7F2A · B9C1 · 4E08 · 91D3 · 0AC7"`. It is what a person
+/// compares between the PC's screen and the phone to be sure they are talking to each other.
+///
+/// It is 80 bits long because the PC's public key is not secret (it is handed to anyone who
+/// asks), so an impostor can set about finding a key of their own whose fingerprint matches,
+/// in advance and at leisure. At 48 bits that takes about 2^47 attempts, which a determined
+/// attacker with a few GPUs can afford; at 80 bits it is out of reach. The first three groups
+/// are the same as the shorter fingerprint older versions showed, so versions side by side
+/// still agree on them.
+pub fn compute_fingerprint(pubkey: &[u8; 32]) -> String {
+    let hash = Sha256::digest(pubkey);
+    hash[..FINGERPRINT_BYTES]
+        .chunks(2)
+        .map(|pair| format!("{:02X}{:02X}", pair[0], pair[1]))
+        .collect::<Vec<_>>()
+        .join(" \u{00B7} ")
 }
 
 /// Sliding replay window (128 packets) to defend against UDP replay and reordering.
@@ -152,12 +171,16 @@ impl NoiseResponder {
         msg1: &[u8],
     ) -> Result<(Vec<u8>, [u8; 32], NoiseTransport), CryptoError> {
         let builder = Builder::new(NOISE_PATTERN.parse()?);
-        let mut hs = builder.local_private_key(&self.static_key).build_responder()?;
+        let mut hs = builder
+            .local_private_key(&self.static_key)
+            .build_responder()?;
 
         let mut read_buf = vec![0u8; msg1.len()];
         hs.read_message(msg1, &mut read_buf)?;
 
-        let remote_key_slice = hs.get_remote_static().ok_or(CryptoError::MissingRemoteKey)?;
+        let remote_key_slice = hs
+            .get_remote_static()
+            .ok_or(CryptoError::MissingRemoteKey)?;
         let mut client_pubkey = [0u8; 32];
         client_pubkey.copy_from_slice(remote_key_slice);
 
@@ -178,7 +201,10 @@ pub struct NoiseInitiator {
 
 impl NoiseInitiator {
     pub fn new(local_priv: [u8; 32], remote_pub: [u8; 32]) -> Self {
-        Self { local_priv, remote_pub }
+        Self {
+            local_priv,
+            remote_pub,
+        }
     }
 
     pub fn start_handshake(&self) -> Result<(Vec<u8>, snow::HandshakeState), CryptoError> {
@@ -206,6 +232,52 @@ impl NoiseInitiator {
     }
 }
 
+/// Writes `data` to `path` atomically: the bytes go to a private temporary file
+/// in the same directory first, then are moved into place, so a crash can never
+/// leave a half-written file behind.
+///
+/// With `replace == false` an existing file is never touched and `Ok(false)` is
+/// returned, which makes concurrent first-time creation safe (exactly one
+/// writer wins). The file is created readable by its owner only on Unix.
+fn atomic_write(path: &Path, data: &[u8], replace: bool) -> std::io::Result<bool> {
+    use std::fs::OpenOptions;
+    use std::io::{ErrorKind, Write};
+    #[cfg(unix)]
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let tmp = path.with_file_name(format!(".{name}.{:016x}.tmp", rand::random::<u64>()));
+
+    let mut opts = OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    opts.mode(0o600);
+    {
+        let mut file = opts.open(&tmp)?;
+        file.write_all(data)?;
+        file.sync_all()?;
+    }
+
+    let outcome = if replace {
+        fs::rename(&tmp, path).map(|()| true)
+    } else {
+        // A hard link fails if `path` exists, which is exactly the no-clobber
+        // guarantee we need, and is atomic.
+        match fs::hard_link(&tmp, path) {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(false),
+            // Filesystems without hard links: fall back to check-then-rename.
+            Err(_) if !path.exists() => fs::rename(&tmp, path).map(|()| true),
+            Err(_) => Ok(false),
+        }
+    };
+    let _ = fs::remove_file(&tmp);
+    outcome
+}
+
 /// Persistent store for trusted client public keys with atomic write semantics.
 pub struct PairingStore {
     path: PathBuf,
@@ -223,7 +295,10 @@ impl PairingStore {
             HashSet::new()
         };
 
-        Self { path, trusted_clients }
+        Self {
+            path,
+            trusted_clients,
+        }
     }
 
     pub fn is_trusted(&self, pubkey: &[u8; 32]) -> bool {
@@ -248,42 +323,79 @@ impl PairingStore {
         self.save()
     }
 
+    /// Number of paired devices.
+    pub fn len(&self) -> usize {
+        self.trusted_clients.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.trusted_clients.is_empty()
+    }
+
+    /// Public keys of all paired devices, in a stable (sorted) order. Entries
+    /// that are not valid 32-byte keys (a hand-edited file) are skipped.
+    pub fn trusted_keys(&self) -> Vec<[u8; 32]> {
+        let mut keys: Vec<[u8; 32]> = self
+            .trusted_clients
+            .iter()
+            .filter_map(|b64| {
+                let bytes = base64::engine::general_purpose::STANDARD.decode(b64).ok()?;
+                <[u8; 32]>::try_from(bytes.as_slice()).ok()
+            })
+            .collect();
+        keys.sort_unstable();
+        keys
+    }
+
     fn save(&self) -> Result<(), CryptoError> {
         if let Some(parent) = self.path.parent() {
             let _ = fs::create_dir_all(parent);
         }
         let data = serde_json::to_string_pretty(&self.trusted_clients)?;
-        let tmp_path = self.path.with_extension("tmp");
-        fs::write(&tmp_path, data)?;
-        fs::rename(&tmp_path, &self.path)?;
+        atomic_write(&self.path, data.as_bytes(), true)?;
         Ok(())
     }
 }
 
 /// Cross-platform server static identity key persistence.
+///
+/// The on-disk form is platform specific (DPAPI-protected on Windows, raw bytes
+/// readable only by the owner elsewhere); everything else is shared.
 pub struct IdentityStore;
 
 impl IdentityStore {
     pub fn load_or_generate(key_path: &Path) -> Result<([u8; 32], [u8; 32]), CryptoError> {
         if key_path.exists() {
-            let priv_key = Self::read_key(key_path)?;
-            let pub_key = Self::derive_public_key(&priv_key)?;
-            return Ok((priv_key, pub_key));
+            return Self::load(key_path);
         }
 
-        // Generate new keypair only when the key file does NOT exist.
-        let builder = Builder::new(NOISE_PATTERN.parse()?);
-        let keypair = builder.generate_keypair()?;
-        let mut priv_key = [0u8; 32];
-        let mut pub_key = [0u8; 32];
-        priv_key.copy_from_slice(&keypair.private);
-        pub_key.copy_from_slice(&keypair.public);
+        // Generate a new keypair only when the key file does NOT exist.
+        let (priv_key, pub_key) = generate_keypair()?;
 
         if let Some(parent) = key_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
 
-        Self::save_key(key_path, &priv_key)?;
+        let encoded = encode_key(&priv_key)?;
+        if atomic_write(key_path, &encoded, false)? {
+            Ok((priv_key, pub_key))
+        } else {
+            // Another process created the identity between our check and our
+            // write. Use theirs so both agree on a single fingerprint.
+            Self::load(key_path)
+        }
+    }
+
+    fn load(key_path: &Path) -> Result<([u8; 32], [u8; 32]), CryptoError> {
+        let data = fs::read(key_path)?;
+        let (priv_key, needs_migration) = decode_key(&data)?;
+        if needs_migration {
+            // Best effort: an unmigrated key still works, it is just unprotected.
+            if let Ok(encoded) = encode_key(&priv_key) {
+                let _ = atomic_write(key_path, &encoded, true);
+            }
+        }
+        let pub_key = Self::derive_public_key(&priv_key)?;
         Ok((priv_key, pub_key))
     }
 
@@ -291,106 +403,111 @@ impl IdentityStore {
         let point = curve25519_dalek::montgomery::MontgomeryPoint::mul_base_clamped(*priv_key);
         Ok(point.0)
     }
+}
 
-    #[cfg(windows)]
-    fn save_key(path: &Path, key: &[u8; 32]) -> Result<(), CryptoError> {
-        use std::ptr::null_mut;
-        use windows_sys::Win32::Foundation::LocalFree;
-        use windows_sys::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
+/// Turns a private key into the bytes stored on disk (DPAPI-encrypted for the
+/// current Windows user).
+#[cfg(windows)]
+fn encode_key(key: &[u8; 32]) -> Result<Vec<u8>, CryptoError> {
+    use std::ptr::null_mut;
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
 
-        unsafe {
-            let in_blob = CRYPT_INTEGER_BLOB {
-                cbData: key.len() as u32,
-                pbData: key.as_ptr() as *mut u8,
-            };
-            let mut out_blob = CRYPT_INTEGER_BLOB {
-                cbData: 0,
-                pbData: null_mut(),
-            };
+    unsafe {
+        let in_blob = CRYPT_INTEGER_BLOB {
+            cbData: key.len() as u32,
+            pbData: key.as_ptr() as *mut u8,
+        };
+        let mut out_blob = CRYPT_INTEGER_BLOB {
+            cbData: 0,
+            pbData: null_mut(),
+        };
 
-            let ok = CryptProtectData(&in_blob, null_mut(), null_mut(), null_mut(), null_mut(), 0, &mut out_blob);
-            if ok == 0 {
-                return Err(CryptoError::DpapiError);
-            }
-
-            let protected_bytes = std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize);
-            let res = fs::write(path, protected_bytes);
-            LocalFree(out_blob.pbData as _);
-            res.map_err(CryptoError::Io)
+        let ok = CryptProtectData(
+            &in_blob,
+            null_mut(),
+            null_mut(),
+            null_mut(),
+            null_mut(),
+            0,
+            &mut out_blob,
+        );
+        if ok == 0 {
+            return Err(CryptoError::DpapiError);
         }
+
+        let protected =
+            std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize).to_vec();
+        LocalFree(out_blob.pbData as _);
+        Ok(protected)
     }
+}
 
-    #[cfg(windows)]
-    fn read_key(path: &Path) -> Result<[u8; 32], CryptoError> {
-        use std::ptr::null_mut;
-        use windows_sys::Win32::Foundation::LocalFree;
-        use windows_sys::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
+/// Inverse of [`encode_key`]. The flag reports that the file held a legacy
+/// unprotected 32-byte key and should be rewritten in the protected form.
+#[cfg(windows)]
+fn decode_key(data: &[u8]) -> Result<([u8; 32], bool), CryptoError> {
+    use std::ptr::null_mut;
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
 
-        let data = fs::read(path)?;
-        // Handle migration from raw 32-byte file
-        if data.len() == 32 {
-            let mut key = [0u8; 32];
-            key.copy_from_slice(&data);
-            let _ = Self::save_key(path, &key);
-            return Ok(key);
-        }
-
-        unsafe {
-            let in_blob = CRYPT_INTEGER_BLOB {
-                cbData: data.len() as u32,
-                pbData: data.as_ptr() as *mut u8,
-            };
-            let mut out_blob = CRYPT_INTEGER_BLOB {
-                cbData: 0,
-                pbData: null_mut(),
-            };
-
-            let ok = CryptUnprotectData(&in_blob, null_mut(), null_mut(), null_mut(), null_mut(), 0, &mut out_blob);
-            if ok == 0 {
-                return Err(CryptoError::DpapiError);
-            }
-
-            if out_blob.cbData != 32 {
-                LocalFree(out_blob.pbData as _);
-                return Err(CryptoError::InvalidKeyLength {
-                    expected: 32,
-                    actual: out_blob.cbData as usize,
-                });
-            }
-
-            let mut key = [0u8; 32];
-            key.copy_from_slice(std::slice::from_raw_parts(out_blob.pbData, 32));
-            LocalFree(out_blob.pbData as _);
-            Ok(key)
-        }
-    }
-
-    #[cfg(not(windows))]
-    fn save_key(path: &Path, key: &[u8; 32]) -> Result<(), CryptoError> {
-        use std::fs::OpenOptions;
-        use std::io::Write;
-        #[cfg(unix)]
-        use std::os::unix::fs::OpenOptionsExt;
-
-        let mut opts = OpenOptions::new();
-        opts.write(true).create(true).truncate(true);
-        #[cfg(unix)]
-        opts.mode(0o600);
-        let mut file = opts.open(path)?;
-        file.write_all(key)?;
-        Ok(())
-    }
-
-    #[cfg(not(windows))]
-    fn read_key(path: &Path) -> Result<[u8; 32], CryptoError> {
-        let data = fs::read(path)?;
-        if data.len() != 32 {
-            return Err(CryptoError::InvalidKeyLength { expected: 32, actual: data.len() });
-        }
+    // Handle migration from a raw 32-byte file (a DPAPI blob is always longer).
+    if data.len() == 32 {
         let mut key = [0u8; 32];
-        key.copy_from_slice(&data);
-        Ok(key)
+        key.copy_from_slice(data);
+        return Ok((key, true));
     }
+
+    unsafe {
+        let in_blob = CRYPT_INTEGER_BLOB {
+            cbData: data.len() as u32,
+            pbData: data.as_ptr() as *mut u8,
+        };
+        let mut out_blob = CRYPT_INTEGER_BLOB {
+            cbData: 0,
+            pbData: null_mut(),
+        };
+
+        let ok = CryptUnprotectData(
+            &in_blob,
+            null_mut(),
+            null_mut(),
+            null_mut(),
+            null_mut(),
+            0,
+            &mut out_blob,
+        );
+        if ok == 0 {
+            return Err(CryptoError::DpapiError);
+        }
+
+        if out_blob.cbData != 32 {
+            LocalFree(out_blob.pbData as _);
+            return Err(CryptoError::InvalidKeyLength {
+                expected: 32,
+                actual: out_blob.cbData as usize,
+            });
+        }
+
+        let mut key = [0u8; 32];
+        key.copy_from_slice(std::slice::from_raw_parts(out_blob.pbData, 32));
+        LocalFree(out_blob.pbData as _);
+        Ok((key, false))
+    }
+}
+
+#[cfg(not(windows))]
+fn encode_key(key: &[u8; 32]) -> Result<Vec<u8>, CryptoError> {
+    Ok(key.to_vec())
+}
+
+#[cfg(not(windows))]
+fn decode_key(data: &[u8]) -> Result<([u8; 32], bool), CryptoError> {
+    let key: [u8; 32] = data.try_into().map_err(|_| CryptoError::InvalidKeyLength {
+        expected: 32,
+        actual: data.len(),
+    })?;
+    Ok((key, false))
 }
 
 #[cfg(test)]
@@ -432,13 +549,17 @@ mod tests {
         // 4. Test client -> server encryption with explicit nonce
         let client_payload = b"Hello from client";
         let (nonce_c, encrypted_for_server) = client_transport.encrypt(client_payload).unwrap();
-        let decrypted_by_server = server_transport.decrypt(nonce_c, &encrypted_for_server).unwrap();
+        let decrypted_by_server = server_transport
+            .decrypt(nonce_c, &encrypted_for_server)
+            .unwrap();
         assert_eq!(client_payload.as_slice(), decrypted_by_server.as_slice());
 
         // 5. Test server -> client encryption
         let server_payload = b"Welcome from server";
         let (nonce_s, encrypted_for_client) = server_transport.encrypt(server_payload).unwrap();
-        let decrypted_by_client = client_transport.decrypt(nonce_s, &encrypted_for_client).unwrap();
+        let decrypted_by_client = client_transport
+            .decrypt(nonce_s, &encrypted_for_client)
+            .unwrap();
         assert_eq!(server_payload.as_slice(), decrypted_by_client.as_slice());
     }
 
@@ -496,15 +617,21 @@ mod tests {
         // Vector 1: 32 bytes of 0x42
         let dummy_pubkey = [0x42u8; 32];
         let fp1 = compute_fingerprint(&dummy_pubkey);
-        assert_eq!(fp1, "425E \u{00B7} D4E4 \u{00B7} A36B");
+        assert_eq!(
+            fp1,
+            "425E \u{00B7} D4E4 \u{00B7} A36B \u{00B7} 30EA \u{00B7} 21B9"
+        );
 
         // Vector 2: 32 bytes from 0x00 to 0x1F
         let mut seq_pubkey = [0u8; 32];
-        for i in 0..32 {
-            seq_pubkey[i] = i as u8;
+        for (i, byte) in seq_pubkey.iter_mut().enumerate() {
+            *byte = i as u8;
         }
         let fp2 = compute_fingerprint(&seq_pubkey);
-        assert_eq!(fp2, "630D \u{00B7} CD29 \u{00B7} 66C4");
+        assert_eq!(
+            fp2,
+            "630D \u{00B7} CD29 \u{00B7} 66C4 \u{00B7} 3366 \u{00B7} 9112"
+        );
     }
 
     #[test]
@@ -536,7 +663,8 @@ mod tests {
 
     #[test]
     fn test_pairing_store_atomic_save() {
-        let dir = std::env::temp_dir().join(format!("telepad_test_pairing_{}", rand::random::<u64>()));
+        let dir =
+            std::env::temp_dir().join(format!("telepad_test_pairing_{}", rand::random::<u64>()));
         let _ = fs::create_dir_all(&dir);
         let store_file = dir.join("trusted.json");
 
@@ -551,6 +679,130 @@ mod tests {
         let store_reloaded = PairingStore::load_or_default(store_file);
         assert!(store_reloaded.is_trusted(&dummy_pubkey));
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn scratch_dir(tag: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("telepad_{tag}_{:016x}", rand::random::<u64>()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn files_in(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn identity_is_created_once_and_reloaded_identically() {
+        let dir = scratch_dir("identity");
+        let path = dir.join("identity.key");
+        let first = IdentityStore::load_or_generate(&path).unwrap();
+        let second = IdentityStore::load_or_generate(&path).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(IdentityStore::derive_public_key(&first.0).unwrap(), first.1);
+        // Only the key itself is left; no temporary files.
+        assert_eq!(files_in(&dir), vec!["identity.key".to_string()]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_first_start_agrees_on_one_identity() {
+        let dir = scratch_dir("race");
+        let path = dir.join("identity.key");
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let path = path.clone();
+                std::thread::spawn(move || IdentityStore::load_or_generate(&path).unwrap())
+            })
+            .collect();
+        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        // Every racing server must end up with the identity that is on disk.
+        assert!(
+            results.iter().all(|r| *r == results[0]),
+            "servers disagree on the identity"
+        );
+        assert_eq!(IdentityStore::load_or_generate(&path).unwrap(), results[0]);
+        assert_eq!(files_in(&dir), vec!["identity.key".to_string()]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn identity_file_is_readable_only_by_its_owner() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch_dir("perm");
+        let path = dir.join("identity.key");
+        IdentityStore::load_or_generate(&path).unwrap();
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn atomic_write_without_replace_never_clobbers() {
+        let dir = scratch_dir("atomic");
+        let path = dir.join("f");
+        assert!(atomic_write(&path, b"one", false).unwrap());
+        assert!(!atomic_write(&path, b"two", false).unwrap());
+        assert_eq!(fs::read(&path).unwrap(), b"one");
+        assert!(atomic_write(&path, b"three", true).unwrap());
+        assert_eq!(fs::read(&path).unwrap(), b"three");
+        assert_eq!(files_in(&dir), vec!["f".to_string()]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pairing_store_lists_and_forgets_devices() {
+        let dir = scratch_dir("pairing_list");
+        let path = dir.join("trusted.json");
+        let mut store = PairingStore::load_or_default(path.clone());
+        assert!(store.is_empty());
+        assert_eq!(store.len(), 0);
+
+        let (a, b) = ([0x01u8; 32], [0x02u8; 32]);
+        store.trust(&b).unwrap();
+        store.trust(&a).unwrap();
+        store.trust(&a).unwrap(); // idempotent
+        assert_eq!(store.len(), 2);
+        assert_eq!(store.trusted_keys(), vec![a, b], "keys come back sorted");
+
+        // Survives a restart.
+        let mut reloaded = PairingStore::load_or_default(path.clone());
+        assert_eq!(reloaded.trusted_keys(), vec![a, b]);
+        reloaded.forget(&a).unwrap();
+        assert!(!reloaded.is_trusted(&a));
+        assert!(reloaded.is_trusted(&b));
+        reloaded.forget_all().unwrap();
+        assert!(PairingStore::load_or_default(path).is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pairing_store_skips_malformed_entries() {
+        let dir = scratch_dir("pairing_bad");
+        let path = dir.join("trusted.json");
+        let good = base64::engine::general_purpose::STANDARD.encode([0x07u8; 32]);
+        let short = base64::engine::general_purpose::STANDARD.encode([0x07u8; 5]);
+        fs::write(&path, format!(r#"["{good}", "{short}", "not base64!!"]"#)).unwrap();
+        let store = PairingStore::load_or_default(path);
+        assert_eq!(store.trusted_keys(), vec![[0x07u8; 32]]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pairing_store_with_garbage_file_starts_empty_instead_of_failing() {
+        let dir = scratch_dir("pairing_garbage");
+        let path = dir.join("trusted.json");
+        fs::write(&path, b"{ this is not json").unwrap();
+        assert!(PairingStore::load_or_default(path).is_empty());
         let _ = fs::remove_dir_all(&dir);
     }
 }

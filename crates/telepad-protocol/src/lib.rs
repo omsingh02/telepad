@@ -8,6 +8,10 @@ pub const WIRE_DISCOVERY_PROBE: u8 = 0xC3;
 pub const WIRE_DISCOVERY_REPLY: u8 = 0xC4;
 pub const WIRE_PAIRING_INTRO_REQ: u8 = 0xC5;
 pub const WIRE_PAIRING_INTRO_RESP: u8 = 0xC6;
+/// Sent instead of a handshake response when the server will not accept this
+/// device (it has not been paired and pairing is closed). Clients that predate
+/// it see an unexpected reply and fail the handshake at once instead of timing out.
+pub const WIRE_PAIRING_REJECTED: u8 = 0xC7;
 
 pub const TELEPAD_PORT: u16 = 5000;
 pub const TELEPAD_MULTICAST_GROUP: &str = "239.255.42.67";
@@ -27,9 +31,11 @@ pub const MSG_TYPE_CLIPBOARD_GET: u8 = 0x0E;
 pub const MSG_TYPE_CLIPBOARD_SET: u8 = 0x0F;
 pub const MSG_TYPE_LAUNCH_ACTION: u8 = 0x10;
 pub const MSG_TYPE_NOW_PLAYING_Q: u8 = 0x11;
+pub const MSG_TYPE_HOST_INFO_Q: u8 = 0x12;
 
 pub const MSG_TYPE_CLIPBOARD_DATA: u8 = 0x80;
 pub const MSG_TYPE_NOW_PLAYING: u8 = 0x81;
+pub const MSG_TYPE_HOST_INFO: u8 = 0x82;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum ProtocolError {
@@ -137,6 +143,71 @@ impl TryFrom<u8> for SystemAction {
     }
 }
 
+/// Operating system of the machine running the server. Lets the phone show the
+/// right key names (Win / Command / Super) and send the right shortcuts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum HostOs {
+    /// Not reported, or an operating system this version does not know. Clients
+    /// should behave as they did before hosts reported anything (Windows).
+    #[default]
+    Unknown = 0,
+    Windows = 1,
+    MacOs = 2,
+    Linux = 3,
+}
+
+impl HostOs {
+    /// The OS this binary was built for.
+    pub fn current() -> Self {
+        if cfg!(windows) {
+            Self::Windows
+        } else if cfg!(target_os = "macos") {
+            Self::MacOs
+        } else if cfg!(target_os = "linux") {
+            Self::Linux
+        } else {
+            Self::Unknown
+        }
+    }
+}
+
+impl From<u8> for HostOs {
+    /// Never fails: a newer server may report an OS this version has not heard of.
+    fn from(val: u8) -> Self {
+        match val {
+            1 => Self::Windows,
+            2 => Self::MacOs,
+            3 => Self::Linux,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+/// Feature bits in [`HostInfo::capabilities`].
+pub mod capabilities {
+    /// The server can report what is playing (`NowPlaying` replies carry real data).
+    pub const NOW_PLAYING: u8 = 0x01;
+    /// The server can read and write the clipboard.
+    pub const CLIPBOARD: u8 = 0x02;
+}
+
+/// What a server tells a phone about itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct HostInfo {
+    pub os: HostOs,
+    /// Bitmask of [`capabilities`].
+    pub capabilities: u8,
+    /// Server version as `(major, minor, patch)`.
+    pub version: (u8, u8, u8),
+}
+
+impl HostInfo {
+    pub fn supports(&self, capability: u8) -> bool {
+        self.capabilities & capability != 0
+    }
+}
+
 pub mod modifiers {
     pub const LCTRL: u8 = 0x01;
     pub const LSHIFT: u8 = 0x02;
@@ -161,11 +232,25 @@ pub struct NowPlayingState {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClientMessage {
-    MouseMove { dx: i16, dy: i16 },
-    MouseButton { button: MouseButtonKind, pressed: bool },
-    Scroll { delta: i16 },
-    KeyPress { keycode: u16, mods: u8 },
-    KeyRelease { keycode: u16, mods: u8 },
+    MouseMove {
+        dx: i16,
+        dy: i16,
+    },
+    MouseButton {
+        button: MouseButtonKind,
+        pressed: bool,
+    },
+    Scroll {
+        delta: i16,
+    },
+    KeyPress {
+        keycode: u16,
+        mods: u8,
+    },
+    KeyRelease {
+        keycode: u16,
+        mods: u8,
+    },
     TextInput(String),
     MediaCmd(MediaAction),
     VolumeCmd(VolumeDirection),
@@ -174,6 +259,7 @@ pub enum ClientMessage {
     ClipboardSet(String),
     LaunchAction(SystemAction),
     NowPlayingQuery,
+    HostInfoQuery,
 }
 
 impl ClientMessage {
@@ -248,6 +334,9 @@ impl ClientMessage {
             Self::NowPlayingQuery => {
                 buf.put_u8(MSG_TYPE_NOW_PLAYING_Q);
             }
+            Self::HostInfoQuery => {
+                buf.put_u8(MSG_TYPE_HOST_INFO_Q);
+            }
         }
         Ok(())
     }
@@ -260,7 +349,10 @@ impl ClientMessage {
         match msg_type {
             MSG_TYPE_MOUSE_MOVE => {
                 if buf.len() < 4 {
-                    return Err(ProtocolError::BufferTooShort { expected: 4, actual: buf.len() });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 4,
+                        actual: buf.len(),
+                    });
                 }
                 let dx = buf.get_i16_le();
                 let dy = buf.get_i16_le();
@@ -268,7 +360,10 @@ impl ClientMessage {
             }
             MSG_TYPE_MOUSE_BUTTON => {
                 if buf.len() < 2 {
-                    return Err(ProtocolError::BufferTooShort { expected: 2, actual: buf.len() });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 2,
+                        actual: buf.len(),
+                    });
                 }
                 let button = MouseButtonKind::try_from(buf.get_u8())?;
                 let pressed = buf.get_u8() != 0;
@@ -276,14 +371,20 @@ impl ClientMessage {
             }
             MSG_TYPE_SCROLL => {
                 if buf.len() < 2 {
-                    return Err(ProtocolError::BufferTooShort { expected: 2, actual: buf.len() });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 2,
+                        actual: buf.len(),
+                    });
                 }
                 let delta = buf.get_i16_le();
                 Ok(Self::Scroll { delta })
             }
             MSG_TYPE_KEY_PRESS => {
                 if buf.len() < 3 {
-                    return Err(ProtocolError::BufferTooShort { expected: 3, actual: buf.len() });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 3,
+                        actual: buf.len(),
+                    });
                 }
                 let keycode = buf.get_u16_le();
                 let mods = buf.get_u8();
@@ -291,7 +392,10 @@ impl ClientMessage {
             }
             MSG_TYPE_KEY_RELEASE => {
                 if buf.len() < 3 {
-                    return Err(ProtocolError::BufferTooShort { expected: 3, actual: buf.len() });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 3,
+                        actual: buf.len(),
+                    });
                 }
                 let keycode = buf.get_u16_le();
                 let mods = buf.get_u8();
@@ -299,25 +403,37 @@ impl ClientMessage {
             }
             MSG_TYPE_TEXT_INPUT => {
                 if buf.len() < 2 {
-                    return Err(ProtocolError::BufferTooShort { expected: 2, actual: buf.len() });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 2,
+                        actual: buf.len(),
+                    });
                 }
                 let len = buf.get_u16_le() as usize;
                 if buf.len() < len {
-                    return Err(ProtocolError::BufferTooShort { expected: len, actual: buf.len() });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: len,
+                        actual: buf.len(),
+                    });
                 }
                 let text = String::from_utf8(buf[..len].to_vec())?;
                 Ok(Self::TextInput(text))
             }
             MSG_TYPE_MEDIA_CMD => {
                 if buf.is_empty() {
-                    return Err(ProtocolError::BufferTooShort { expected: 1, actual: 0 });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 1,
+                        actual: 0,
+                    });
                 }
                 let action = MediaAction::try_from(buf.get_u8())?;
                 Ok(Self::MediaCmd(action))
             }
             MSG_TYPE_VOLUME_CMD => {
                 if buf.is_empty() {
-                    return Err(ProtocolError::BufferTooShort { expected: 1, actual: 0 });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 1,
+                        actual: 0,
+                    });
                 }
                 let direction = VolumeDirection::try_from(buf.get_u8())?;
                 Ok(Self::VolumeCmd(direction))
@@ -326,23 +442,33 @@ impl ClientMessage {
             MSG_TYPE_CLIPBOARD_GET => Ok(Self::ClipboardGet),
             MSG_TYPE_CLIPBOARD_SET => {
                 if buf.len() < 2 {
-                    return Err(ProtocolError::BufferTooShort { expected: 2, actual: buf.len() });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 2,
+                        actual: buf.len(),
+                    });
                 }
                 let len = buf.get_u16_le() as usize;
                 if buf.len() < len {
-                    return Err(ProtocolError::BufferTooShort { expected: len, actual: buf.len() });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: len,
+                        actual: buf.len(),
+                    });
                 }
                 let text = String::from_utf8(buf[..len].to_vec())?;
                 Ok(Self::ClipboardSet(text))
             }
             MSG_TYPE_LAUNCH_ACTION => {
                 if buf.is_empty() {
-                    return Err(ProtocolError::BufferTooShort { expected: 1, actual: 0 });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 1,
+                        actual: 0,
+                    });
                 }
                 let action = SystemAction::try_from(buf.get_u8())?;
                 Ok(Self::LaunchAction(action))
             }
             MSG_TYPE_NOW_PLAYING_Q => Ok(Self::NowPlayingQuery),
+            MSG_TYPE_HOST_INFO_Q => Ok(Self::HostInfoQuery),
             other => Err(ProtocolError::UnknownMessageType(other)),
         }
     }
@@ -352,6 +478,7 @@ impl ClientMessage {
 pub enum ServerMessage {
     ClipboardData(String),
     NowPlaying(NowPlayingState),
+    HostInfo(HostInfo),
 }
 
 impl ServerMessage {
@@ -415,6 +542,15 @@ impl ServerMessage {
                 encode_str(buf, &state.source_app);
                 Ok(())
             }
+            Self::HostInfo(info) => {
+                buf.put_u8(MSG_TYPE_HOST_INFO);
+                buf.put_u8(info.os as u8);
+                buf.put_u8(info.capabilities);
+                buf.put_u8(info.version.0);
+                buf.put_u8(info.version.1);
+                buf.put_u8(info.version.2);
+                Ok(())
+            }
         }
     }
 
@@ -426,18 +562,27 @@ impl ServerMessage {
         match msg_type {
             MSG_TYPE_CLIPBOARD_DATA => {
                 if buf.len() < 2 {
-                    return Err(ProtocolError::BufferTooShort { expected: 2, actual: buf.len() });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 2,
+                        actual: buf.len(),
+                    });
                 }
                 let len = buf.get_u16_le() as usize;
                 if buf.len() < len {
-                    return Err(ProtocolError::BufferTooShort { expected: len, actual: buf.len() });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: len,
+                        actual: buf.len(),
+                    });
                 }
                 let text = String::from_utf8(buf[..len].to_vec())?;
                 Ok(Self::ClipboardData(text))
             }
             MSG_TYPE_NOW_PLAYING => {
                 if buf.len() < 17 {
-                    return Err(ProtocolError::BufferTooShort { expected: 17, actual: buf.len() });
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 17,
+                        actual: buf.len(),
+                    });
                 }
                 let flags = buf.get_u8();
                 let is_playing = (flags & 0x01) != 0;
@@ -448,21 +593,25 @@ impl ServerMessage {
                 let pos = buf.get_i64_le();
                 let dur = buf.get_i64_le();
 
-                let read_str = |b: &mut &[u8], present: bool| -> Result<Option<String>, ProtocolError> {
-                    if b.is_empty() {
-                        return Ok(if present { Some(String::new()) } else { None });
-                    }
-                    let l = b.get_u8() as usize;
-                    if l == 0 {
-                        return Ok(if present { Some(String::new()) } else { None });
-                    }
-                    if b.len() < l {
-                        return Err(ProtocolError::BufferTooShort { expected: l, actual: b.len() });
-                    }
-                    let s = String::from_utf8(b[..l].to_vec())?;
-                    b.advance(l);
-                    Ok(Some(s))
-                };
+                let read_str =
+                    |b: &mut &[u8], present: bool| -> Result<Option<String>, ProtocolError> {
+                        if b.is_empty() {
+                            return Ok(if present { Some(String::new()) } else { None });
+                        }
+                        let l = b.get_u8() as usize;
+                        if l == 0 {
+                            return Ok(if present { Some(String::new()) } else { None });
+                        }
+                        if b.len() < l {
+                            return Err(ProtocolError::BufferTooShort {
+                                expected: l,
+                                actual: b.len(),
+                            });
+                        }
+                        let s = String::from_utf8(b[..l].to_vec())?;
+                        b.advance(l);
+                        Ok(Some(s))
+                    };
 
                 let title = read_str(&mut buf, title_present)?;
                 let artist = read_str(&mut buf, artist_present)?;
@@ -477,6 +626,23 @@ impl ServerMessage {
                     artist,
                     album,
                     source_app,
+                }))
+            }
+            MSG_TYPE_HOST_INFO => {
+                // Later versions may append fields; read what we know and ignore the rest.
+                if buf.len() < 5 {
+                    return Err(ProtocolError::BufferTooShort {
+                        expected: 5,
+                        actual: buf.len(),
+                    });
+                }
+                let os = HostOs::from(buf.get_u8());
+                let capabilities = buf.get_u8();
+                let version = (buf.get_u8(), buf.get_u8(), buf.get_u8());
+                Ok(Self::HostInfo(HostInfo {
+                    os,
+                    capabilities,
+                    version,
                 }))
             }
             other => Err(ProtocolError::UnknownMessageType(other)),
@@ -520,13 +686,19 @@ mod tests {
 
     #[test]
     fn test_key_press_and_release_roundtrip() {
-        let press = ClientMessage::KeyPress { keycode: 0x41, mods: modifiers::LCTRL | modifiers::LSHIFT };
+        let press = ClientMessage::KeyPress {
+            keycode: 0x41,
+            mods: modifiers::LCTRL | modifiers::LSHIFT,
+        };
         let mut buf = BytesMut::new();
         press.encode(&mut buf).unwrap();
         let decoded = ClientMessage::decode(&buf).unwrap();
         assert_eq!(press, decoded);
 
-        let release = ClientMessage::KeyRelease { keycode: 0x41, mods: 0 };
+        let release = ClientMessage::KeyRelease {
+            keycode: 0x41,
+            mods: 0,
+        };
         buf.clear();
         release.encode(&mut buf).unwrap();
         let decoded = ClientMessage::decode(&buf).unwrap();
@@ -547,7 +719,10 @@ mod tests {
         let huge_text = "a".repeat(70000);
         let msg = ClientMessage::TextInput(huge_text);
         let mut buf = BytesMut::new();
-        assert!(matches!(msg.encode(&mut buf), Err(ProtocolError::PayloadTooLarge { .. })));
+        assert!(matches!(
+            msg.encode(&mut buf),
+            Err(ProtocolError::PayloadTooLarge { .. })
+        ));
     }
 
     #[test]
@@ -566,6 +741,87 @@ mod tests {
             msg.encode(&mut buf).unwrap();
             let decoded = ClientMessage::decode(&buf).unwrap();
             assert_eq!(msg, decoded);
+        }
+    }
+
+    #[test]
+    fn host_info_query_roundtrip() {
+        let mut buf = BytesMut::new();
+        ClientMessage::HostInfoQuery.encode(&mut buf).unwrap();
+        assert_eq!(&buf[..], &[MSG_TYPE_HOST_INFO_Q]);
+        assert_eq!(
+            ClientMessage::decode(&buf).unwrap(),
+            ClientMessage::HostInfoQuery
+        );
+    }
+
+    #[test]
+    fn host_info_roundtrip_and_wire_layout() {
+        let info = HostInfo {
+            os: HostOs::Linux,
+            capabilities: capabilities::CLIPBOARD,
+            version: (2, 1, 7),
+        };
+        let mut buf = BytesMut::new();
+        ServerMessage::HostInfo(info).encode(&mut buf).unwrap();
+        // [type][os][caps][major][minor][patch]
+        assert_eq!(&buf[..], &[0x82, 3, 0x02, 2, 1, 7]);
+        assert_eq!(
+            ServerMessage::decode(&buf).unwrap(),
+            ServerMessage::HostInfo(info)
+        );
+        assert!(info.supports(capabilities::CLIPBOARD));
+        assert!(!info.supports(capabilities::NOW_PLAYING));
+    }
+
+    #[test]
+    fn host_info_tolerates_extra_trailing_fields_from_newer_servers() {
+        let bytes = [MSG_TYPE_HOST_INFO, 2, 0x03, 3, 0, 0, 0xAA, 0xBB, 0xCC];
+        let ServerMessage::HostInfo(info) = ServerMessage::decode(&bytes).unwrap() else {
+            panic!("expected host info");
+        };
+        assert_eq!(info.os, HostOs::MacOs);
+        assert_eq!(info.version, (3, 0, 0));
+        assert!(info.supports(capabilities::NOW_PLAYING) && info.supports(capabilities::CLIPBOARD));
+    }
+
+    #[test]
+    fn host_info_with_an_unknown_os_decodes_as_unknown_instead_of_failing() {
+        let ServerMessage::HostInfo(info) =
+            ServerMessage::decode(&[MSG_TYPE_HOST_INFO, 200, 0, 1, 2, 3]).unwrap()
+        else {
+            panic!("expected host info");
+        };
+        assert_eq!(info.os, HostOs::Unknown);
+        assert_eq!(HostOs::from(0), HostOs::Unknown);
+        assert_eq!(HostOs::from(1), HostOs::Windows);
+        assert_eq!(HostOs::from(2), HostOs::MacOs);
+        assert_eq!(HostOs::from(3), HostOs::Linux);
+    }
+
+    #[test]
+    fn truncated_host_info_is_rejected() {
+        for len in 1..6 {
+            let bytes = &[MSG_TYPE_HOST_INFO, 1, 0, 1, 2, 3][..len];
+            assert!(
+                matches!(
+                    ServerMessage::decode(bytes),
+                    Err(ProtocolError::BufferTooShort { .. })
+                ),
+                "len {len}"
+            );
+        }
+    }
+
+    #[test]
+    fn current_host_os_matches_the_build_target() {
+        let os = HostOs::current();
+        if cfg!(windows) {
+            assert_eq!(os, HostOs::Windows);
+        } else if cfg!(target_os = "macos") {
+            assert_eq!(os, HostOs::MacOs);
+        } else if cfg!(target_os = "linux") {
+            assert_eq!(os, HostOs::Linux);
         }
     }
 

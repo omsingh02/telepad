@@ -2,6 +2,7 @@
 members = [
     "crates/telepad-protocol",
     "crates/telepad-crypto",
+    "crates/telepad-platform",
     "crates/telepad-server",
 ]
 resolver = "2"
@@ -27,5 +28,7 @@ base64 = "0.22"
 subtle = "2.6"
 rand = "0.8"
 clap = { version = "4.5", features = ["derive"] }
-arboard = "3.4"
+# Text clipboard only: the default `image-data` feature drags in the whole
+# `image` crate stack, which the server never uses.
+arboard = { version = "3.4", default-features = false }
 hostname = "0.4"

@@ -5,6 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[lib]
+name = "telepad_server"
+path = "src/lib.rs"
+
 [[bin]]
 name = "telepad-server"
 path = "src/main.rs"
@@ -12,23 +16,15 @@ path = "src/main.rs"
 [dependencies]
 telepad-protocol = { path = "../telepad-protocol" }
 telepad-crypto = { path = "../telepad-crypto" }
+telepad-platform = { path = "../telepad-platform" }
 tokio.workspace = true
 bytes.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 clap.workspace = true
-arboard.workspace = true
 thiserror.workspace = true
 hostname.workspace = true
+socket2 = "0.6"
 
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = [
-    "Win32_UI_Input_KeyboardAndMouse",
-    "Win32_Foundation",
-    "Win32_System_SystemServices",
-    "Win32_System_Shutdown",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_NetworkManagement_IpHelper",
-    "Win32_NetworkManagement_Ndis",
-    "Win32_Networking_WinSock"
-] }
+[dev-dependencies]
+rand.workspace = true
