@@ -29,14 +29,6 @@ keystore.properties
 *.keystore
 *.jks
 
-# Server build outputs
-server/build/
-server/out/
-server/cmake-build-*/
-
-# Server vendored deps (you must clone these locally)
-server/third_party/noise-c/
-
 # Android libs that must be vendored (download yourself)
 android/app/libs/*.jar
 

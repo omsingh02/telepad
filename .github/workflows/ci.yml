@@ -34,7 +34,6 @@ jobs:
               - '.github/workflows/ci.yml'
             rust:
               - 'crates/**'
-              - 'server/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'rust-toolchain.toml'
@@ -46,7 +45,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.android == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up JDK 17
@@ -59,20 +58,28 @@ jobs:
       - name: Grant execute permission for gradlew
         working-directory: android
         run: chmod +x gradlew
-      - name: Build debug APK and run unit tests
+      # Unit tests include the network tests (a real Noise handshake against a stand-in PC on
+      # loopback) and the screenshot tests, which render every screen with Robolectric.
+      # Lint errors fail the build; its warnings (such as newer library versions) do not.
+      - name: Build debug APK, run unit tests and lint
         working-directory: android
-        run: ./gradlew assembleDebug testDebugUnitTest --no-daemon
+        run: ./gradlew assembleDebug testDebugUnitTest lintDebug --no-daemon
+      # The release build is minified with R8, which can break things the debug build never
+      # shows. Building it here catches that before a release is tagged (it is left unsigned).
+      - name: Build minified release APK
+        working-directory: android
+        run: ./gradlew assembleRelease -x lint --no-daemon
 
   rust:
     name: Rust Workspace (${{ matrix.os }})
     needs: changes
     if: ${{ needs.changes.outputs.rust == 'true' }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-24.04]
+        os: [windows-latest, ubuntu-24.04, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Linux dependencies
@@ -84,14 +91,18 @@ jobs:
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           toolchain: stable
+          components: clippy, rustfmt
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - name: Run Cargo Tests
-        run: cargo test --workspace --verbose
-      - name: Run C Protocol Tests
+      # Formatting does not depend on the OS (rustfmt reads every platform's files), so once is enough.
+      - name: Check formatting
         if: runner.os == 'Linux'
-        run: |
-          gcc -Iserver/include server/tests/test_protocol.c -o test_protocol
-          ./test_protocol
+        run: cargo fmt --all -- --check
+      # Each OS lints its own backend (uinput, SendInput, CoreGraphics), which a
+      # single-platform lint run would never even compile.
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Run Cargo Tests
+        run: cargo test --workspace --locked --verbose
       - name: Build Rust Server Release
-        run: cargo build --release --bin telepad-server
+        run: cargo build --release --locked --bin telepad-server

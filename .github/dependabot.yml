@@ -1,0 +1,27 @@
+# Keeps dependencies and the CI actions current. Updates arrive monthly, grouped, as pull
+# requests that CI checks like any other (the app has hundreds of tests for exactly this).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      rust-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: monthly
+    groups:
+      android-minor-and-patch:
+        update-types: [minor, patch]

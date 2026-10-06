@@ -22,8 +22,34 @@ permissions:
   contents: read
 
 jobs:
+  # An APK and a server that call themselves a different version from the tag they are
+  # published under break update checks and confuse bug reports, so stop before building.
+  check-version:
+    name: Check Tag Matches Versions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Compare the tag with the app and server versions
+        run: |
+          VERSION="${TAG#v}"
+          VERSION="${VERSION%%-*}"   # a pre-release tag such as v2.1.0-rc1 releases 2.1.0
+          APP=$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)".*/\1/p' android/app/build.gradle.kts | head -n 1)
+          SERVER=$(sed -nE 's/^version = "([^"]+)".*/\1/p' Cargo.toml | head -n 1)
+          echo "Tag $TAG is version $VERSION; Android app $APP; desktop server $SERVER"
+          if [ "$VERSION" != "$APP" ] || [ "$VERSION" != "$SERVER" ]; then
+            echo "::error::Tag $TAG is version $VERSION, but the Android app is $APP and the desktop server is $SERVER. Make them match, then tag again."
+            exit 1
+          fi
+
   build-android:
     name: Build Android Release APK
+    needs: check-version
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -45,15 +71,6 @@ jobs:
       - name: Grant execute permission for gradlew
         working-directory: android
         run: chmod +x gradlew
-
-      - name: Validate Gradle Version against Tag
-        run: |
-          CLEAN_TAG="${TAG#v}"
-          GRADLE_VN=$(grep 'versionName =' android/app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
-          echo "Release tag: $TAG (clean: $CLEAN_TAG), Gradle versionName: $GRADLE_VN"
-          if [ "$CLEAN_TAG" != "$GRADLE_VN" ]; then
-            echo "::warning::Tag version ($CLEAN_TAG) does not match Gradle versionName ($GRADLE_VN)"
-          fi
 
       - name: Prepare Keystore
         id: keystore
@@ -79,7 +96,9 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || secrets.KEY_ALIAS || 'nwerf' }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
-        run: ./gradlew testReleaseUnitTest assembleRelease -x lint --no-daemon --stacktrace
+        # The tests run against the debug build, as in CI: the screen tests need the test
+        # activity that Compose only adds to debug builds. The release build is still R8-minified.
+        run: ./gradlew testDebugUnitTest assembleRelease -x lint --no-daemon --stacktrace
 
       - name: Stage APK for release
         run: |
@@ -101,6 +120,7 @@ jobs:
 
   build-server-windows:
     name: Build Windows Desktop Server
+    needs: check-version
     runs-on: windows-latest
     timeout-minutes: 20
     permissions:
@@ -150,6 +170,7 @@ jobs:
 
   build-server-linux:
     name: Build Linux Desktop Server
+    needs: check-version
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     permissions:
@@ -197,9 +218,56 @@ jobs:
           path: dist/*.tar.gz
           retention-days: 7
 
+  build-server-macos:
+    name: Build macOS Desktop Server (universal)
+    needs: check-version
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Run Cargo Tests (Release Test Gate)
+        run: cargo test --workspace --locked --verbose
+
+      - name: Build both architectures
+        run: |
+          cargo build --release --locked --bin telepad-server --target aarch64-apple-darwin
+          cargo build --release --locked --bin telepad-server --target x86_64-apple-darwin
+
+      - name: Create universal binary
+        run: |
+          mkdir -p dist
+          lipo -create -output target/telepad-server \
+            target/aarch64-apple-darwin/release/telepad-server \
+            target/x86_64-apple-darwin/release/telepad-server
+          lipo -info target/telepad-server
+          chmod +x target/telepad-server
+          tar -czvf "dist/telepad-server-${TAG}-macos-universal.tar.gz" -C target telepad-server
+          ls -la dist
+
+      - name: Upload macOS Server artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: telepad-server-macos
+          path: dist/*.tar.gz
+          retention-days: 7
+
   publish-release:
     name: Publish Release Assets
-    needs: [build-android, build-server-windows, build-server-linux]
+    needs: [build-android, build-server-windows, build-server-linux, build-server-macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
