@@ -1,0 +1,17 @@
+# Normalise text files to LF in the repository and in working trees, on every OS,
+# so that diffs are about code and not about line endings.
+* text=auto eol=lf
+
+# Scripts that must keep the endings their interpreter expects.
+*.sh   text eol=lf
+gradlew text eol=lf
+*.bat  text eol=crlf
+
+# Binary files.
+*.jar  binary
+*.png  binary
+*.jpg  binary
+*.webp binary
+*.ico  binary
+*.keystore binary
+*.jks  binary
