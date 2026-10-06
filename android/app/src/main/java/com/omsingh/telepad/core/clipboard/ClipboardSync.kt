@@ -33,9 +33,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * Making the user tap "send" or "fetch" turns clipboard sync from a footgun
  * into a tool. This matches what KDE Connect does, and it's the right default.
  *
- * **Size limit:** 32 KB. Above that we silently truncate. The server enforces
- * the same limit before applying. (UDP MTU is the real ceiling — even after
- * fragmentation, multi-MB clipboards over UDP are abuse, not feature.)
+ * **Size limit:** [MAX_CLIPBOARD_UTF8_BYTES] (1200 bytes of UTF-8). A clipboard
+ * message has to fit in one UDP datagram, so longer text is clipped to its first
+ * 1200 bytes (never mid-character). The desktop server applies the same limit to
+ * what it sends back. Sending more would need a chunked protocol.
  *
  * **Thread safety:** [ClipboardManager] requires the main thread. All public
  * methods marshal to main via the system service's internal handler. The
@@ -43,8 +44,14 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 class ClipboardSync(
     context: Context,
+    /** Whether the user has clipboard sync switched on; nothing crosses while it is off. */
+    private val enabled: () -> Boolean = { true },
     private val dispatcher: () -> InputDispatcher?
 ) {
+
+    /** What happened when the phone's clipboard was sent. */
+    enum class PushResult { SENT, EMPTY, DISABLED }
+
 
     private val appContext = context.applicationContext
     private val clipboard = appContext.getSystemService(Context.CLIPBOARD_SERVICE)
@@ -60,23 +67,27 @@ class ClipboardSync(
 
     /**
      * Send the phone's current clipboard text to the PC.
-     * Silent no-op if the phone clipboard is empty or non-text.
-     * @return true if a clipboard payload was sent.
+     * Does nothing if sync is off or the phone clipboard is empty or not text.
      */
-    fun pushToPc(): Boolean {
-        val text = readPhoneClipboard() ?: return false
-        val truncated = if (text.length > MAX_LEN) text.substring(0, MAX_LEN) else text
-        dispatcher()?.dispatch(InputEvent.ClipboardSet(truncated))
-        Log.d(TAG, "Pushed clipboard to PC (${truncated.length} chars)")
-        return true
+    fun pushToPc(): PushResult {
+        if (!enabled()) return PushResult.DISABLED
+        val text = readPhoneClipboard() ?: return PushResult.EMPTY
+        val clipped = text.clipToUtf8Bytes(MAX_CLIPBOARD_UTF8_BYTES)
+        dispatcher()?.dispatch(InputEvent.ClipboardSet(clipped))
+        Log.d(TAG, "Pushed clipboard to PC (${clipped.length} of ${text.length} chars)")
+        return PushResult.SENT
     }
+
+    /** The phone's clipboard as text, clipped to what can be sent, or null if empty or not text. */
+    fun phoneClipboardText(): String? =
+        readPhoneClipboard()?.clipToUtf8Bytes(MAX_CLIPBOARD_UTF8_BYTES)
 
     /**
      * Request the PC's clipboard. The response arrives asynchronously via
      * [onClipboardReceived] and is published on [latestFromPc].
      */
     fun pullFromPc() {
-        dispatcher()?.dispatch(InputEvent.ClipboardGet)
+        if (enabled()) dispatcher()?.dispatch(InputEvent.ClipboardGet)
     }
 
     /**
@@ -89,9 +100,10 @@ class ClipboardSync(
      * user had locally.
      */
     fun onClipboardReceived(text: String) {
-        val truncated = if (text.length > MAX_LEN) text.substring(0, MAX_LEN) else text
-        _latestFromPc.value = truncated
-        Log.d(TAG, "Received clipboard from PC (${truncated.length} chars)")
+        if (!enabled()) return
+        val clipped = text.clipToUtf8Bytes(MAX_CLIPBOARD_UTF8_BYTES)
+        _latestFromPc.value = clipped
+        Log.d(TAG, "Received clipboard from PC (${clipped.length} chars)")
     }
 
     /**
@@ -119,6 +131,5 @@ class ClipboardSync(
 
     private companion object {
         const val TAG = "ClipboardSync"
-        const val MAX_LEN = 32 * 1024  // 32 KB UTF-16 char ceiling.
     }
 }

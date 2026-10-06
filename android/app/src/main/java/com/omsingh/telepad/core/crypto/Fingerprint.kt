@@ -2,35 +2,37 @@ package com.omsingh.telepad.core.crypto
 
 import java.security.MessageDigest
 import java.util.Base64
-import kotlin.experimental.and
 
 /**
- * Cryptographic fingerprint utilities for human-readable server verification.
+ * The short code a person compares between the PC's screen and the phone, to be sure
+ * they are talking to each other and not to something in between.
  *
- * The fingerprint is the first 6 bytes (48 bits) of `SHA-256(serverStaticPubkey)`
- * rendered as 12 uppercase hex characters in 3 segments of 4: `7F2A · B9C1 · 4E08`.
+ * The fingerprint is the first 10 bytes (80 bits) of `SHA-256(serverStaticPubkey)`, as 20
+ * uppercase hex characters in groups of four: `7F2A · B9C1 · 4E08 · 91D3 · 0AC7`.
  *
- * **Why 48 bits?** Two reasons:
- *  - It's short enough to read off a PC screen and verify on a phone in ~3 seconds.
- *  - It's long enough that an attacker who wants to perform a real-time MITM with
- *    a colliding fingerprint would need to grind ~2^47 X25519 keypairs and pick
- *    one that happens to match — computationally infeasible during a pairing window.
+ * **Why 80 bits.** The PC's public key is not secret: it is handed to anyone who asks. An
+ * impostor can therefore set about finding a key of their own whose fingerprint matches the
+ * PC's, in advance and at leisure. At 48 bits (the length this used to be) that takes about
+ * 2^47 attempts, which a determined attacker with a few GPUs can afford. At 80 bits it cannot
+ * be done. The first three groups are what the shorter code showed, so an older version beside
+ * a newer one still agrees on them.
  *
- * **Why SHA-256 and not BLAKE2s?** The Android platform ships SHA-256 in the
- * standard JCA provider — no extra dependency. BLAKE2s would have been ~10×
- * faster but for a 32-byte one-shot input the difference is microseconds, and
- * portability across phones running ancient providers matters more.
+ * **Why SHA-256.** The platform provides it, so no extra dependency is needed, and for a
+ * one-off hash of 32 bytes any speed difference is microseconds.
  */
 object Fingerprint {
 
-    /** Length in bytes of the fingerprint prefix (48 bits). */
-    private const val FINGERPRINT_BYTES = 6
+    /** Length in bytes of the fingerprint prefix (80 bits). */
+    private const val FINGERPRINT_BYTES = 10
+
+    /** Hex characters per displayed group. */
+    private const val GROUP = 4
 
     /**
      * Compute the fingerprint of a 32-byte X25519 public key.
      *
      * @param publicKey Exactly 32 bytes. Throws if shorter.
-     * @return 12-character uppercase hex string like `"7F2AB9C14E08"` (no spaces).
+     * @return 20-character uppercase hex string like `"7F2AB9C14E0891D30AC7"` (no spaces).
      *         Use [format] to add visual separators.
      */
     fun of(publicKey: ByteArray): String {
@@ -59,25 +61,19 @@ object Fingerprint {
 
     /**
      * Format a raw hex fingerprint into the human-friendly grouped form.
-     * Input: `"7F2AB9C14E08"`. Output: `"7F2A · B9C1 · 4E08"`.
+     * Input: `"7F2AB9C14E0891D30AC7"`. Output: `"7F2A · B9C1 · 4E08 · 91D3 · 0AC7"`.
      */
     fun format(rawHex: String): String {
         require(rawHex.length == FINGERPRINT_BYTES * 2) {
             "Expected ${FINGERPRINT_BYTES * 2} hex characters, got ${rawHex.length}"
         }
-        return buildString(rawHex.length + 6) {
-            append(rawHex, 0, 4)
-            append(" · ")
-            append(rawHex, 4, 8)
-            append(" · ")
-            append(rawHex, 8, 12)
-        }
+        return rawHex.chunked(GROUP).joinToString(" · ")
     }
 
     /**
      * Constant-time comparison of two fingerprints. Use this rather than
      * `==` to avoid timing oracles on the (small) chance an attacker can
-     * observe comparison latency. For 12-character strings this is mostly
+     * observe comparison latency. For strings this short it is mostly
      * principle — but it's the right principle.
      */
     fun matches(a: String, b: String): Boolean {

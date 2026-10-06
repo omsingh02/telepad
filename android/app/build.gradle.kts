@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.roborazzi)
 }
 
 android {
@@ -17,8 +18,13 @@ android {
         applicationId = "com.omsingh.telepad"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // One version for the whole project: the release tag and the server's Cargo version
+        // must match it (the release workflow checks). Bump it here, in Cargo.toml and by tagging.
+        versionName = "2.0.0"
+        // Derived, so it can only go up when the version does: 2.1.3 becomes 20103.
+        versionCode = versionName!!.split(".").let { (major, minor, patch) ->
+            major.toInt() * 10_000 + minor.toInt() * 100 + patch.toInt()
+        }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -68,7 +74,9 @@ android {
     }
 
     lint {
-        abortOnError = false
+        // Errors fail the build (CI runs lintDebug); warnings, such as a newer version of a
+        // library being available, are reported but do not.
+        abortOnError = true
         checkReleaseBuilds = false
     }
 
@@ -103,6 +111,10 @@ android {
         unitTests {
             isIncludeAndroidResources = true
             isReturnDefaultValues = true
+            all {
+                // Screenshots of Compose render closer to a real device with the hardware path.
+                it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+            }
         }
     }
 }
@@ -121,6 +133,7 @@ dependencies {
 
     // AndroidX
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -135,14 +148,18 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
 
-    // Noise crypto: vendored local JAR if present, fallback to JitPack.
-    implementation(fileTree("libs") { include("*.jar") })
-    implementation("com.github.rweather:noise-java:master-SNAPSHOT")
+    // Noise protocol implementation (resolved from JitPack at a pinned commit).
+    implementation(libs.noise.java)
 
     // Tests
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
 }

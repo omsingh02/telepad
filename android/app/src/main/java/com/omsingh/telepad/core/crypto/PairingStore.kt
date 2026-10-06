@@ -1,180 +1,161 @@
 package com.omsingh.telepad.core.crypto
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.omsingh.telepad.core.trust.LegacyTrust
+import com.omsingh.telepad.core.trust.PairedDevice
+import com.omsingh.telepad.core.trust.TrustStore
+import kotlinx.serialization.json.Json
 import java.security.SecureRandom
 import java.util.Base64
 
+/** The phone's own long-term identity, which the Noise handshake presents to the PC. */
+interface ClientIdentity {
+    /**
+     * The 32-byte X25519 private key. Created on first use, then kept for good, which is
+     * what lets a PC recognise this phone when it comes back. Never log or expose it.
+     */
+    fun localStaticPrivateKey(): ByteArray
+}
+
 /**
- * Persistent trust store for paired hosts (TOFU pairing model).
+ * Everything security-relevant the phone remembers: its own identity key and the PCs
+ * it has paired with.
  *
- * Stores two kinds of data, both inside an [EncryptedSharedPreferences] file
- * wrapped by an Android Keystore-backed AES-256-GCM master key:
+ * Both live in an [EncryptedSharedPreferences] file wrapped by an Android Keystore
+ * AES-256-GCM master key.
  *
- *  1. **`trusted_hosts`** — JSON-shaped `host_or_address → base64(serverPubkey)`.
- *     On every connect we look up the pubkey by host. If we have one, we run
- *     Noise IK silently. If we don't, the UI shows the pairing screen with the
- *     fingerprint for the user to verify, then calls [trust] to persist.
+ *  - **Paired devices** are stored by the PC's public key, which is its identity (see
+ *    [PairedDevice]). The trust decision about a PC at some address is made by
+ *    [com.omsingh.telepad.core.trust.TrustResolver].
+ *  - **The local static key** is generated once. We need its *raw bytes* to hand to the
+ *    Noise library, so a Keystore-only key (which only ever gives an opaque handle)
+ *    would not do; encrypted preferences protect the bytes at rest instead.
  *
- *  2. **`local_static_priv`** — our own client static X25519 private key (32 B,
- *     base64). Generated once on first use, reused forever. This is what makes
- *     mutual auth work — the server can recognise the same phone reconnecting.
- *
- * **Why EncryptedSharedPreferences and not a SQLCipher database or KeyStore-only
- * keys?** Two reasons:
- *  - The data set is tiny (one tuple per paired PC, plus one 32-byte secret).
- *    A full DB is overkill.
- *  - We need the *raw bytes* of the private key to feed to noise-java, so a pure
- *    KeyStore key (where `.privateKey` returns an opaque handle and not bytes)
- *    won't work for Noise. EncryptedSharedPreferences stores raw bytes encrypted
- *    at rest with a KeyStore-wrapped AES-256-GCM master key — the right level
- *    of protection for this threat model.
- *
- * **Threat model recap.** We're defending against:
- *  - **Offline device compromise** (someone has your unlocked phone): can't
- *    get keys without root and disk decryption. KeyStore-wrapped storage helps.
- *  - **App-level extraction by malware** (some other app reads our SharedPrefs):
- *    EncryptedSharedPreferences prevents this.
- *  - **App backup leak** (cloud backups carry secrets): explicitly excluded in
- *    `data_extraction_rules.xml` and `backup_rules.xml`.
- *
- * We are *not* defending against:
- *  - Rooted phone with active malware (game over).
- *  - User social-engineered into trusting a malicious fingerprint (UX problem,
- *    not crypto problem).
- *
- * **Thread safety:** Backed by [SharedPreferences] which is thread-safe for
- * reads. Writes use `apply()` (background-committed) so the API is non-blocking
- * for the caller.
+ * The threat model: an app that can read this app's files, or a cloud backup, learns
+ * nothing (backups of these files are excluded in the manifest rules). Not covered: a
+ * rooted phone running malware, and a user talked into trusting the wrong fingerprint.
  */
 class PairingStore private constructor(
-    private val prefs: SharedPreferences
-) {
+    private val prefs: SharedPreferences,
+) : TrustStore {
 
-    /**
-     * Look up the persisted server pubkey for [host]. Returns null if the host
-     * has never been trusted — caller should show the pairing flow.
-     */
-    fun getTrustedPubkey(host: String): String? =
-        prefs.getString(trustedKey(host), null)
+    private val json = Json { ignoreUnknownKeys = true }
 
-    /**
-     * Look up whether [pubkeyBase64] is trusted under any host address.
-     * Allows seamless reconnect when a PC gets a new DHCP lease.
-     */
-    fun getTrustedPubkeyByFingerprint(pubkeyBase64: String): String? {
-        return prefs.all
-            .filterKeys { it.startsWith(TRUSTED_PREFIX) }
-            .entries
-            .firstOrNull { (_, v) -> v == pubkeyBase64 }
-            ?.value as? String
-    }
+    // ── Paired devices ───────────────────────────────────────────────
 
-    /**
-     * Persist [pubkeyBase64] as the trusted pubkey for [host]. Idempotent.
-     */
-    fun trust(host: String, pubkeyBase64: String) {
+    @Synchronized
+    override fun all(): List<PairedDevice> =
+        prefs.all.entries
+            .filter { it.key.startsWith(DEVICE_PREFIX) }
+            .mapNotNull { (_, value) ->
+                (value as? String)?.let { runCatching { json.decodeFromString(PairedDevice.serializer(), it) }.getOrNull() }
+            }
+            .sortedWith(compareByDescending<PairedDevice> { it.lastConnectedMs }.thenBy { it.name.lowercase() })
+
+    @Synchronized
+    override fun put(device: PairedDevice) {
         prefs.edit()
-            .putString(trustedKey(host), pubkeyBase64)
-            .putString(PUBKEY_PREFIX + pubkeyBase64, host)
+            .putString(DEVICE_PREFIX + device.publicKey, json.encodeToString(PairedDevice.serializer(), device))
             .apply()
-        Log.i(TAG, "Trusted host: $host")
     }
 
-    /**
-     * Forget a previously trusted host. Used by Settings → Privacy → Forget device.
-     */
-    fun forget(host: String) {
-        val pubkey = getTrustedPubkey(host)
-        prefs.edit().apply {
-            remove(trustedKey(host))
-            if (pubkey != null) {
-                remove(PUBKEY_PREFIX + pubkey)
-            }
-        }.apply()
-        Log.i(TAG, "Forgot host: $host")
+    @Synchronized
+    override fun remove(publicKey: String) {
+        prefs.edit().remove(DEVICE_PREFIX + publicKey).apply()
+        Log.i(TAG, "Forgot a paired device")
     }
 
-    /** Forget every trusted host. Local static key is preserved. */
-    fun forgetAll() {
-        val all = prefs.all.keys.filter { it.startsWith(TRUSTED_PREFIX) || it.startsWith(PUBKEY_PREFIX) }
-        prefs.edit().apply { all.forEach { remove(it) } }.apply()
-        Log.i(TAG, "Forgot all hosts (${all.size})")
+    @Synchronized
+    override fun clear() {
+        val keys = prefs.all.keys.filter { it.startsWith(DEVICE_PREFIX) }
+        prefs.edit().apply { keys.forEach { remove(it) } }.apply()
+        Log.i(TAG, "Forgot all paired devices (${keys.size})")
     }
 
-    /**
-     * Return all currently trusted host → fingerprint pairs, for the
-     * "Manage paired devices" screen. The fingerprint is derived on demand
-     * so the storage stays minimal.
-     */
-    fun listTrusted(): List<TrustedHost> {
-        return prefs.all
-            .filterKeys { it.startsWith(TRUSTED_PREFIX) }
-            .mapNotNull { (k, v) ->
-                val pubkeyBase64 = v as? String ?: return@mapNotNull null
-                val host = k.removePrefix(TRUSTED_PREFIX)
-                val raw = runCatching { Fingerprint.ofBase64(pubkeyBase64) }
-                    .getOrNull() ?: return@mapNotNull null
-                TrustedHost(
-                    host = host,
-                    pubkeyBase64 = pubkeyBase64,
-                    fingerprint = Fingerprint.format(raw)
-                )
-            }
-            .sortedBy { it.host }
-    }
+    // ── Our own identity ─────────────────────────────────────────────
 
-    /**
-     * Get our local long-term client static key.
-     * On first call, generates a fresh 32-byte X25519 private key and stores it.
-     * On subsequent calls, returns the persisted bytes.
-     *
-     * **Never log or expose this**. It's a long-term secret.
-     */
-    fun localStaticPrivateKey(): ByteArray {
+    // `commit` rather than `apply`: the key must be on disk before it is used to pair, or a crash
+    // in between would leave a PC trusting a key the phone no longer has. Callers are off the main thread.
+    @SuppressLint("ApplySharedPref")
+    @Synchronized
+    override fun localStaticPrivateKey(): ByteArray {
         prefs.getString(KEY_LOCAL_STATIC, null)?.let { existing ->
             return Base64.getDecoder().decode(existing)
         }
         val key = ByteArray(32).also { SecureRandom().nextBytes(it) }
-        // Clamp per RFC 7748 §5: turn random 32 bytes into a valid X25519 scalar.
-        // (Strictly, noise-java does this internally too, but doing it here means
-        //  the bytes-on-disk are also the bytes-fed-to-noise, no transformation.)
-        key[0]  = (key[0].toInt() and 0xF8).toByte()
+        // Clamp per RFC 7748 section 5, so the bytes on disk are exactly the bytes
+        // fed to Noise, with no transformation in between.
+        key[0] = (key[0].toInt() and 0xF8).toByte()
         key[31] = (key[31].toInt() and 0x7F).toByte()
-        key[31] = (key[31].toInt() or  0x40).toByte()
+        key[31] = (key[31].toInt() or 0x40).toByte()
 
         prefs.edit()
             .putString(KEY_LOCAL_STATIC, Base64.getEncoder().encodeToString(key))
-            .apply()
-        Log.i(TAG, "Generated new local static key")
+            .commit()
+        Log.i(TAG, "Generated a new local identity")
         return key
     }
 
-    /** For "factory reset" in privacy settings. Forces a new identity on next use. */
-    fun resetLocalIdentity() {
-        prefs.edit().remove(KEY_LOCAL_STATIC).apply()
-        Log.w(TAG, "Local identity reset — next connect will pair as a new client")
+    /**
+     * Throws away this phone's identity. The next connection pairs as a brand-new
+     * phone, so every PC has to be told to trust it again.
+     */
+    @SuppressLint("ApplySharedPref")
+    @Synchronized
+    override fun resetLocalIdentity() {
+        prefs.edit().remove(KEY_LOCAL_STATIC).commit()
+        Log.w(TAG, "Local identity reset")
     }
 
-    private fun trustedKey(host: String) = TRUSTED_PREFIX + host.lowercase()
+    // ── Upgrading from the address-keyed format ──────────────────────
 
-    /** UI-facing snapshot of a single trusted host. */
-    data class TrustedHost(
-        val host: String,
-        val pubkeyBase64: String,
-        /** Pre-formatted `"7F2A · B9C1 · 4E08"`. */
-        val fingerprint: String
-    )
+    /** Whether trust is still stored the old way, by address, and [migrateLegacy] has work to do. */
+    override val needsMigration: Boolean get() = prefs.getInt(KEY_SCHEMA, 1) < SCHEMA_VERSION
+
+    /**
+     * Earlier versions stored trust as `address -> public key`. Converts those entries
+     * (named from [favorites], the old list of recent servers) into [PairedDevice]s, once.
+     * Returns how many devices were carried over.
+     */
+    @SuppressLint("ApplySharedPref") // a one-time migration, which must finish before the old data is gone
+    @Synchronized
+    override fun migrateLegacy(favorites: List<LegacyTrust.Favorite>, nowMs: Long): Int {
+        if (prefs.getInt(KEY_SCHEMA, 1) >= SCHEMA_VERSION) return 0
+
+        val legacy = prefs.all.entries
+            .filter { it.key.startsWith(LEGACY_TRUSTED_PREFIX) && it.value is String }
+            .associate { it.key.removePrefix(LEGACY_TRUSTED_PREFIX) to it.value as String }
+        val migrated = LegacyTrust.migrate(legacy, favorites, nowMs = nowMs)
+
+        val editor = prefs.edit()
+        for (device in migrated) {
+            // Never overwrite a device that has already been paired the new way.
+            if (prefs.getString(DEVICE_PREFIX + device.publicKey, null) == null) {
+                editor.putString(DEVICE_PREFIX + device.publicKey, json.encodeToString(PairedDevice.serializer(), device))
+            }
+        }
+        prefs.all.keys
+            .filter { it.startsWith(LEGACY_TRUSTED_PREFIX) || it.startsWith(LEGACY_PUBKEY_PREFIX) }
+            .forEach { editor.remove(it) }
+        editor.putInt(KEY_SCHEMA, SCHEMA_VERSION).commit()
+        Log.i(TAG, "Migrated ${migrated.size} paired device(s) to the new format")
+        return migrated.size
+    }
 
     companion object {
         private const val TAG = "PairingStore"
         private const val PREFS_NAME = "telepad_pairing"
-        private const val TRUSTED_PREFIX = "host:"
-        private const val PUBKEY_PREFIX = "pubkey:"
+        private const val DEVICE_PREFIX = "device:"
+        private const val LEGACY_TRUSTED_PREFIX = "host:"
+        private const val LEGACY_PUBKEY_PREFIX = "pubkey:"
         private const val KEY_LOCAL_STATIC = "local_static_priv"
+        private const val KEY_SCHEMA = "schema"
+        private const val SCHEMA_VERSION = 2
 
         @Volatile private var INSTANCE: PairingStore? = null
 

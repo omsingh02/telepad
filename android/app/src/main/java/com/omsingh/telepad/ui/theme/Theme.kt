@@ -1,158 +1,142 @@
 package com.omsingh.telepad.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
 import com.omsingh.telepad.settings.AccentColor
 import com.omsingh.telepad.settings.ThemeMode
 
+/** The seed colour each accent is generated from (see [ThemeEngine]). */
+internal fun AccentColor.seed(): Int = when (this) {
+    AccentColor.CYAN -> 0xFF0EA5E9.toInt()
+    AccentColor.PURPLE -> 0xFF8B5CF6.toInt()
+    AccentColor.GREEN -> 0xFF10B981.toInt()
+    AccentColor.ORANGE -> 0xFFF97316.toInt()
+    AccentColor.RED -> 0xFFEF4444.toInt()
+}
+
 /**
- * Root theme composable.
+ * Colours Material has no role for: status feedback, and the touch surface.
  *
- * Decides between:
- *  - Material You **dynamic color** (system wallpaper-derived palette) on
- *    Android 12+ when the user opts in.
- *  - Static palette derived from [accentColor] + [themeMode] otherwise.
- *
- * Also sets edge-to-edge transparent system bars and the correct light/dark
- * status bar icon mode via [WindowCompat].
+ * Success and warning keep their meaning (green, amber) whatever the accent is.
+ */
+@Immutable
+class ExtendedColors(
+    val success: Color,
+    val onSuccess: Color,
+    val successContainer: Color,
+    val onSuccessContainer: Color,
+    val warning: Color,
+    val onWarning: Color,
+    val warningContainer: Color,
+    val onWarningContainer: Color,
+    /** Fill of the touch surface. */
+    val pad: Color,
+    /** Resting border of the touch surface. */
+    val padOutline: Color,
+    /** The faint dot grid drawn on the touch surface. */
+    val padGrid: Color,
+)
+
+internal fun ExtendedRoles.toColors() = ExtendedColors(
+    success = Color(success), onSuccess = Color(onSuccess),
+    successContainer = Color(successContainer), onSuccessContainer = Color(onSuccessContainer),
+    warning = Color(warning), onWarning = Color(onWarning),
+    warningContainer = Color(warningContainer), onWarningContainer = Color(onWarningContainer),
+    pad = Color(pad), padOutline = Color(padOutline), padGrid = Color(padGrid),
+)
+
+/**
+ * A complete Material colour scheme for [accent]. Every role is set (see [SchemeRoles]),
+ * so no component falls back to Material's baseline purple.
+ */
+internal fun colorSchemeFor(accent: AccentColor, dark: Boolean): ColorScheme = schemeToColors(ThemeEngine.scheme(accent.seed(), dark))
+
+internal fun schemeToColors(r: SchemeRoles): ColorScheme = ColorScheme(
+    primary = Color(r.primary), onPrimary = Color(r.onPrimary),
+    primaryContainer = Color(r.primaryContainer), onPrimaryContainer = Color(r.onPrimaryContainer),
+    inversePrimary = Color(r.inversePrimary),
+    secondary = Color(r.secondary), onSecondary = Color(r.onSecondary),
+    secondaryContainer = Color(r.secondaryContainer), onSecondaryContainer = Color(r.onSecondaryContainer),
+    tertiary = Color(r.tertiary), onTertiary = Color(r.onTertiary),
+    tertiaryContainer = Color(r.tertiaryContainer), onTertiaryContainer = Color(r.onTertiaryContainer),
+    background = Color(r.background), onBackground = Color(r.onBackground),
+    surface = Color(r.surface), onSurface = Color(r.onSurface),
+    surfaceVariant = Color(r.surfaceVariant), onSurfaceVariant = Color(r.onSurfaceVariant),
+    surfaceTint = Color(r.surfaceTint),
+    inverseSurface = Color(r.inverseSurface), inverseOnSurface = Color(r.inverseOnSurface),
+    error = Color(r.error), onError = Color(r.onError),
+    errorContainer = Color(r.errorContainer), onErrorContainer = Color(r.onErrorContainer),
+    outline = Color(r.outline), outlineVariant = Color(r.outlineVariant),
+    scrim = Color(r.scrim),
+    surfaceBright = Color(r.surfaceBright), surfaceDim = Color(r.surfaceDim),
+    surfaceContainer = Color(r.surfaceContainer),
+    surfaceContainerHigh = Color(r.surfaceContainerHigh),
+    surfaceContainerHighest = Color(r.surfaceContainerHighest),
+    surfaceContainerLow = Color(r.surfaceContainerLow),
+    surfaceContainerLowest = Color(r.surfaceContainerLowest),
+)
+
+private val LocalExtendedColors = staticCompositionLocalOf<ExtendedColors> {
+    error("TelepadTheme is missing: wrap the content in TelepadTheme { }")
+}
+
+/** Telepad's own design tokens, reachable like `MaterialTheme.colorScheme`. */
+object TelepadTheme {
+    val extended: ExtendedColors
+        @Composable @ReadOnlyComposable get() = LocalExtendedColors.current
+}
+
+/**
+ * The app's theme: Material 3, with colours generated from the chosen accent (or taken
+ * from the wallpaper with Material You on Android 12+), and the app's type, shapes and
+ * spacing.
  */
 @Composable
 fun TelepadTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
-    accentColor: AccentColor = AccentColor.CYAN,
+    accent: AccentColor = AccentColor.CYAN,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val systemDark = isSystemInDarkTheme()
-    val isDark = when (themeMode) {
-        ThemeMode.SYSTEM -> systemDark
-        ThemeMode.LIGHT  -> false
-        ThemeMode.DARK   -> true
+    val dark = when (themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
     }
-
     val context = LocalContext.current
-    val scheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            if (isDark) dynamicDarkColorScheme(context)
-            else        dynamicLightColorScheme(context)
-        }
-        isDark -> darkScheme(accentColor)
-        else   -> lightScheme(accentColor)
-    }
+    val useDynamic = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
-    val view = LocalView.current
-    if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as Activity).window
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-            WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = !isDark
-                isAppearanceLightNavigationBars = !isDark
-            }
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-                @Suppress("DEPRECATION") window.statusBarColor = Color.Transparent.toArgb()
-                @Suppress("DEPRECATION") window.navigationBarColor = Color.Transparent.toArgb()
-            }
+    val colorScheme = remember(accent, dark, useDynamic) {
+        when {
+            useDynamic && dark -> dynamicDarkColorScheme(context)
+            useDynamic -> dynamicLightColorScheme(context)
+            else -> colorSchemeFor(accent, dark)
         }
     }
-
-    MaterialTheme(
-        colorScheme = scheme,
-        typography = TelepadTypography,
-        content = content
-    )
-}
-
-private fun darkScheme(accent: AccentColor) = darkColorScheme(
-    primary             = accent.darkPrimary,
-    onPrimary           = DarkBackground,
-    primaryContainer    = DarkSurfaceVariant,
-    onPrimaryContainer  = DarkOnSurface,
-    secondary           = accent.darkPrimary,
-    onSecondary         = DarkBackground,
-    tertiary            = StatusOnline,
-    onTertiary          = DarkBackground,
-    error               = RedDark,
-    onError             = DarkBackground,
-    background          = DarkBackground,
-    onBackground        = DarkOnSurface,
-    surface             = DarkSurface,
-    onSurface           = DarkOnSurface,
-    surfaceVariant      = DarkSurfaceVariant,
-    onSurfaceVariant    = DarkOnSurfaceVar,
-    surfaceContainerLow = DarkSurface,
-    surfaceContainerHigh= DarkSurfaceVariant,
-    outline             = DarkOutline,
-)
-
-private fun lightScheme(accent: AccentColor) = lightColorScheme(
-    primary             = accent.lightPrimary,
-    onPrimary           = LightSurface,
-    primaryContainer    = accent.lightContainer,
-    onPrimaryContainer  = LightOnSurface,
-    secondary           = accent.lightPrimary,
-    onSecondary         = LightSurface,
-    tertiary            = StatusOnline,
-    onTertiary          = LightSurface,
-    error               = RedLight,
-    onError             = LightSurface,
-    background          = LightBackground,
-    onBackground        = LightOnSurface,
-    surface             = LightSurface,
-    onSurface           = LightOnSurface,
-    surfaceVariant      = LightSurfaceVariant,
-    onSurfaceVariant    = LightOnSurfaceVar,
-    surfaceContainerLow = LightSurfaceVariant,
-    surfaceContainerHigh= LightSurfaceVariant,
-    outline             = LightOutline,
-)
-
-private val AccentColor.darkPrimary: Color
-    get() = when (this) {
-        AccentColor.CYAN   -> CyanDark
-        AccentColor.PURPLE -> PurpleDark
-        AccentColor.GREEN  -> GreenDark
-        AccentColor.ORANGE -> OrangeDark
-        AccentColor.RED    -> RedDark
+    val extended = remember(colorScheme.primary, accent, dark, useDynamic) {
+        val seed = if (useDynamic) colorScheme.primary.toArgb() else accent.seed()
+        ThemeEngine.extended(seed, dark).toColors()
     }
 
-private val AccentColor.lightPrimary: Color
-    get() = when (this) {
-        AccentColor.CYAN   -> CyanLight
-        AccentColor.PURPLE -> PurpleLight
-        AccentColor.GREEN  -> GreenLight
-        AccentColor.ORANGE -> OrangeLight
-        AccentColor.RED    -> RedLight
+    CompositionLocalProvider(LocalExtendedColors provides extended) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = TelepadTypography,
+            shapes = TelepadShapes,
+            content = content,
+        )
     }
-
-/** Light container = a translucent tint of the accent atop the surface. */
-private val AccentColor.lightContainer: Color
-    get() = lightPrimary.copy(alpha = 0.12f).compositeOver(LightSurface)
-
-private fun Color.compositeOver(background: Color): Color {
-    val a = alpha
-    val r = red   * a + background.red   * (1f - a)
-    val g = green * a + background.green * (1f - a)
-    val b = blue  * a + background.blue  * (1f - a)
-    return Color(r, g, b, 1f)
 }
-
-/** Re-exported convenience for screens that need transport-tinted surfaces. */
-fun Color.toArgb(): Int = android.graphics.Color.argb(
-    (alpha * 255).toInt().coerceIn(0, 255),
-    (red   * 255).toInt().coerceIn(0, 255),
-    (green * 255).toInt().coerceIn(0, 255),
-    (blue  * 255).toInt().coerceIn(0, 255),
-)

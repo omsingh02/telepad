@@ -1,15 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- A trackpad with a pointer on it. The artwork stays inside the 66dp safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Simple stylized "T" mark in cyan on the dark slate background. -->
+
+    <!-- The pad. -->
     <path
-        android:fillColor="#38BDF8"
-        android:pathData="M30,38 L78,38 L78,48 L60,48 L60,80 L48,80 L48,48 L30,48 Z" />
+        android:fillColor="#24FFFFFF"
+        android:pathData="M35,35 H73 A7,7 0 0 1 80,42 V66 A7,7 0 0 1 73,73 H35 A7,7 0 0 1 28,66 V42 A7,7 0 0 1 35,35 Z"
+        android:strokeColor="#F2FFFFFF"
+        android:strokeWidth="3.2" />
+
+    <!-- The click zone along its bottom edge. -->
     <path
-        android:fillColor="#38BDF8"
-        android:fillAlpha="0.35"
-        android:pathData="M22,30 L86,30 L86,86 L22,86 Z M30,38 L30,78 L78,78 L78,38 Z" />
+        android:pathData="M28,62 H80 M54,62 V73"
+        android:strokeColor="#80FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="2.2" />
+
+    <!-- The pointer. -->
+    <path android:pathData="M44,41 L44,58 L48.5,53.8 L51.8,61 L55,59.6 L51.7,52.6 L58,52.2 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="44"
+                android:startY="41"
+                android:endX="58"
+                android:endY="61">
+                <item android:color="#FF7DD3FC" android:offset="0.0" />
+                <item android:color="#FF38BDF8" android:offset="0.5" />
+                <item android:color="#FF2563EB" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>

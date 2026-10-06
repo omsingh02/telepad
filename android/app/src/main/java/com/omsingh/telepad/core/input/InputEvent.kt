@@ -6,7 +6,7 @@ package com.omsingh.telepad.core.input
  *
  * The active [InputDispatcher] converts these to the appropriate wire format:
  *  - Bluetooth HID: report bytes per USB HID Usage Tables 1.4.
- *  - Wi-Fi UDP: Noise-encrypted protocol messages defined in protocol.h.
+ *  - Wi-Fi UDP: Noise-encrypted protocol messages (see `crates/telepad-protocol`).
  */
 sealed interface InputEvent {
 
@@ -18,14 +18,14 @@ sealed interface InputEvent {
     /** Mouse button press or release. */
     data class MouseButton(val button: Button, val pressed: Boolean) : InputEvent
 
-    /** Vertical scroll delta. Positive = scroll up (content moves down). */
+    /** Vertical scroll in whole wheel notches. Positive = scroll up (content moves down). */
     data class Scroll(val delta: Float) : InputEvent
 
-    /** Single left click (press + release as one logical event). */
+    /**
+     * Single left click (press + release as one logical event). A double-click is
+     * simply two of these in quick succession, which is how a real mouse does it.
+     */
     data object Click : InputEvent
-
-    /** Double left click. */
-    data object DoubleClick : InputEvent
 
     /** Single right click. */
     data object RightClick : InputEvent

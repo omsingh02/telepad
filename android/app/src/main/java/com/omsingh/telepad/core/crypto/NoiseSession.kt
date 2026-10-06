@@ -64,6 +64,28 @@ class ReplayWindow {
     }
 }
 
+/** How [NoiseSession.runHandshake] ended. */
+enum class HandshakeResult {
+    /** Keys agreed; the session is ready to encrypt and decrypt. */
+    ESTABLISHED,
+
+    /**
+     * The PC answered that it has not paired this phone (wire tag `0xC7`).
+     * Retrying will not help until the owner opens pairing on the PC.
+     */
+    NOT_PAIRED,
+
+    /**
+     * Nothing usable came back in time. The PC may be off or unreachable, or it may
+     * be running with a different key (a server that dropped a message it cannot
+     * decrypt stays silent), which only the caller can tell apart.
+     */
+    NO_REPLY,
+
+    /** A local failure: bad key material or a crypto error. */
+    FAILED
+}
+
 /**
  * Noise IK transport security wrapper for Telepad's UDP data plane.
  *
@@ -96,12 +118,22 @@ class NoiseSession(
         get() = sendCipher != null && recvCipher != null
 
     /**
-     * Perform the Noise IK handshake over [socket].
+     * Perform the Noise IK handshake over [socket], once.
+     *
+     * A fresh socket is best for every attempt: a late reply to an earlier attempt then
+     * can never be mistaken for the answer to this one (feeding a handshake a reply that
+     * is not meant for it spoils it for good).
      *
      * @param serverStaticPubkeyBase64 The server's long-term X25519 public key.
-     * @return true on success (session is now ready to [encrypt] / [decrypt]).
+     * @param timeoutMs How long to wait for the PC's answer.
+     * @return [HandshakeResult.ESTABLISHED] on success (session is now ready to
+     *         [encrypt] / [decrypt]); otherwise why it did not.
      */
-    fun runHandshake(socket: DatagramSocket, serverStaticPubkeyBase64: String): Boolean {
+    fun runHandshake(
+        socket: DatagramSocket,
+        serverStaticPubkeyBase64: String,
+        timeoutMs: Int = HANDSHAKE_TIMEOUT_MS,
+    ): HandshakeResult {
         val serverPub = Base64.getDecoder().decode(serverStaticPubkeyBase64)
         require(serverPub.size == 32) { "Server pubkey must be 32 bytes" }
 
@@ -123,23 +155,27 @@ class NoiseSession(
             System.arraycopy(msg1Buf, 0, outFrame, 1, msg1Len)
             socket.send(DatagramPacket(outFrame, outFrame.size))
 
-            // ── Receive Noise IK message 2 ─────────────────────────
+            // ── Receive Noise IK message 2 (or a rejection) ────────
             val rxBuf = ByteArray(256)
             val rxPacket = DatagramPacket(rxBuf, rxBuf.size)
             val prevTimeout = socket.soTimeout
-            socket.soTimeout = HANDSHAKE_TIMEOUT_MS
+            socket.soTimeout = timeoutMs
             try {
                 socket.receive(rxPacket)
             } catch (e: SocketTimeoutException) {
-                Log.w(TAG, "Handshake timeout — no response from server")
-                return false
+                Log.w(TAG, "Handshake timeout: no response from server")
+                return HandshakeResult.NO_REPLY
             } finally {
                 socket.soTimeout = prevTimeout
             }
 
-            if (rxPacket.length < 2 || rxBuf[0] != WIRE_HANDSHAKE_RESP) {
-                Log.w(TAG, "Bad handshake reply: tag=${rxBuf[0]}, len=${rxPacket.length}")
-                return false
+            if (rxPacket.length >= 1 && rxBuf[0] == WIRE_PAIRING_REJECTED) {
+                Log.w(TAG, "Server has not paired this phone")
+                return HandshakeResult.NOT_PAIRED
+            }
+            if (rxPacket.length != 1 + NOISE_IK_MSG2_LEN || rxBuf[0] != WIRE_HANDSHAKE_RESP) {
+                Log.w(TAG, "Unusable handshake reply: tag=${rxBuf[0]}, len=${rxPacket.length}")
+                return HandshakeResult.NO_REPLY
             }
 
             // Strip the wire tag, parse the Noise payload.
@@ -150,11 +186,11 @@ class NoiseSession(
             recvCipher = pair.receiver
             sendNonce = 0L
             Log.i(TAG, "Noise IK handshake established")
-            return true
+            return HandshakeResult.ESTABLISHED
 
         } catch (t: Throwable) {
             Log.w(TAG, "Noise handshake failed: ${t.javaClass.simpleName}: ${t.message}")
-            return false
+            return HandshakeResult.FAILED
         } finally {
             hs.destroy()
         }
@@ -233,6 +269,9 @@ class NoiseSession(
         const val WIRE_HANDSHAKE_INIT: Byte = 0xC0.toByte()
         const val WIRE_HANDSHAKE_RESP: Byte = 0xC1.toByte()
         const val WIRE_TRANSPORT: Byte      = 0xC2.toByte()
+
+        /** Sent by the server instead of [WIRE_HANDSHAKE_RESP] when this phone is not paired. */
+        const val WIRE_PAIRING_REJECTED: Byte = 0xC7.toByte()
 
         // Per the Noise IK pattern with X25519/ChaChaPoly/BLAKE2s and no payload:
         //  msg 1 = e(32) + s+tag(32+16) + 0+tag(0+16)  = 96 bytes

@@ -1,95 +1,123 @@
 package com.omsingh.telepad
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.omsingh.telepad.connection.ConnectionManager
+import com.omsingh.telepad.platform.LocalPlatformActions
+import com.omsingh.telepad.platform.PlatformActions
+import com.omsingh.telepad.ui.TelepadRoot
+import com.omsingh.telepad.ui.screens.devices.DevicesViewModel
+import com.omsingh.telepad.ui.screens.remote.RemoteViewModel
+import com.omsingh.telepad.ui.screens.settings.SettingsViewModel
 import com.omsingh.telepad.ui.theme.TelepadTheme
-import com.omsingh.telepad.viewmodel.MainViewModel
-import com.omsingh.telepad.viewmodel.PairingViewModel
-import com.omsingh.telepad.viewmodel.SettingsViewModel
 
 /**
- * Single activity, hosts the whole NavGraph.
+ * The only activity. It hosts the Compose UI and does what only an activity can: ask for
+ * permissions and open other apps.
  *
- * Permission strategy is just-in-time: we don't ask for Bluetooth at startup.
- * The AddDevice screen's Bluetooth tab triggers the request only when the user
- * tries to use it. Same pattern for POST_NOTIFICATIONS — only requested when
- * the keep-alive setting is toggled on for the first time.
- *
- * Onboarding-shown flag is persisted in a single SharedPreferences entry,
- * keeping the splash-to-first-screen path cheap.
+ * Permissions are asked for at the moment they are needed, with a reason on screen:
+ * Bluetooth only when the person opens the Bluetooth tab, notifications only when they
+ * switch on staying connected in the background.
  */
 class MainActivity : ComponentActivity() {
 
-    private val mainViewModel: MainViewModel by viewModels()
-    private val settingsViewModel: SettingsViewModel by viewModels()
-    private val pairingViewModel: PairingViewModel by viewModels()
+    private val settings: SettingsViewModel by viewModels()
+    private val devices: DevicesViewModel by viewModels()
+    private val remote: RemoteViewModel by viewModels()
 
-    private val bluetoothPermissions: Array<String> = buildList {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            add(Manifest.permission.BLUETOOTH_CONNECT)
-            add(Manifest.permission.BLUETOOTH_SCAN)
-            add(Manifest.permission.BLUETOOTH_ADVERTISE)
-        } else {
-            add(Manifest.permission.BLUETOOTH)
-            add(Manifest.permission.BLUETOOTH_ADMIN)
-        }
-    }.toTypedArray()
+    private val manager by lazy { ConnectionManager.getInstance(application) }
 
-    private val bluetoothPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        val granted = results.values.all { it }
-        bluetoothGranted.value = granted
-        mainViewModel.onBluetoothPermissionChanged(granted)
+    private val bluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        manager.refreshBluetooth()
+    }
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val enableBluetooth = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        manager.refreshBluetooth()
     }
 
-    private val bluetoothGranted by lazy { mutableStateOf(hasBluetoothPermission()) }
+    private val platform = object : PlatformActions {
+        override fun requestBluetoothPermission() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            } else {
+                manager.refreshBluetooth()
+            }
+        }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        override fun enableBluetooth() {
+            enableBluetooth.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+        }
 
-        setContent {
-            val prefs by settingsViewModel.preferences.collectAsState()
-
-            TelepadTheme(
-                themeMode = prefs.themeMode,
-                accentColor = prefs.accentColor,
-                dynamicColor = prefs.dynamicColor,
+        override fun requestNotificationPermission() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
             ) {
-                TelepadNavHost(
-                    mainViewModel = mainViewModel,
-                    settingsViewModel = settingsViewModel,
-                    pairingViewModel = pairingViewModel,
-                    onboardingShown = prefs.onboardingShown,
-                    onOnboardingFinished = {
-                        settingsViewModel.updatePreferences { it.copy(onboardingShown = true) }
-                    },
-                    introShown = prefs.touchpadIntroShown,
-                    onIntroDismissed = {
-                        settingsViewModel.updatePreferences { it.copy(touchpadIntroShown = true) }
-                    },
-                    bluetoothGranted = bluetoothGranted.value,
-                    onRequestBluetooth = {
-                        bluetoothPermissionLauncher.launch(bluetoothPermissions)
-                    },
-                )
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        override fun openUrl(url: String) = open(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+
+        override fun openBluetoothSettings() = open(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+
+        override fun openAppSettings() =
+            open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+
+        private fun open(intent: Intent) {
+            try {
+                startActivity(intent)
+            } catch (_: ActivityNotFoundException) {
+                // Nothing on this phone can handle it; there is nothing useful to do.
             }
         }
     }
 
-    private fun hasBluetoothPermission(): Boolean = bluetoothPermissions.all { p ->
-        ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
+    override fun onCreate(savedInstanceState: Bundle?) {
+        val splash = installSplashScreen()
+        super.onCreate(savedInstanceState)
+        // Hold the splash until the saved settings are read, so the first frame already has
+        // the right theme and the right first screen.
+        splash.setKeepOnScreenCondition { !settings.loaded.value }
+        enableEdgeToEdge()
+
+        setContent {
+            val preferences by settings.preferences.collectAsStateWithLifecycle()
+            TelepadTheme(
+                themeMode = preferences.themeMode,
+                accent = preferences.accentColor,
+                dynamicColor = preferences.dynamicColor,
+            ) {
+                CompositionLocalProvider(LocalPlatformActions provides platform) {
+                    TelepadRoot(
+                        settingsViewModel = settings,
+                        devicesViewModel = devices,
+                        remoteViewModel = remote,
+                        startAtOnboarding = !preferences.onboardingShown,
+                    )
+                }
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        manager.onAppForegrounded()
     }
 }

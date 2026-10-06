@@ -13,97 +13,101 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.omsingh.telepad.MainActivity
 import com.omsingh.telepad.R
+import com.omsingh.telepad.connection.ConnectionManager
+import com.omsingh.telepad.core.input.ConnectionState
+import com.omsingh.telepad.core.input.InputEvent
 
 /**
- * Foreground service that keeps the Telepad connection alive when the app
- * is backgrounded.
+ * Keeps the connection alive while the app is in the background, if the person asked for that
+ * (it is off by default: it costs a notification and a little battery).
  *
- * Required because Android aggressively kills background processes, which
- * would silently sever the Wi-Fi connection mid-typing. The persistent
- * notification is the OS's required acknowledgement that we keep running.
+ * Android freezes or kills background apps, which would quietly end the connection in the
+ * middle of a presentation. A foreground service is the platform's way of saying "this is doing
+ * something the person asked for", and the notification is how it stays honest about it.
+ * The notification doubles as a small remote: play or pause, volume, and disconnect.
  *
- * **Tradeoff:** Costs the user a permanent notification in their shade and
- * a small battery hit. That's why this is **opt-in** via the
- * `keepConnectionAlive` preference. Default off — user can enable when they
- * need it (presentations, long typing sessions).
- *
- * **`foregroundServiceType="connectedDevice"`** — required on Android 14+.
- * Telegram chose `dataSync` here historically; `connectedDevice` is the more
- * honest description for our use case.
+ * `connectedDevice` is the honest service type for talking to a PC (Android 14 requires one).
  */
 class TelepadConnectionService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_DISCONNECT) {
-            com.omsingh.telepad.connection.ConnectionManager.getInstance(application).disconnect()
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return START_NOT_STICKY
+        val manager = ConnectionManager.getInstance(application)
+
+        when (intent?.action) {
+            ACTION_DISCONNECT -> {
+                manager.disconnect()
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_PLAY_PAUSE -> manager.dispatch(InputEvent.MediaCommand(InputEvent.MediaAction.PLAY_PAUSE))
+            ACTION_VOLUME_UP -> manager.dispatch(InputEvent.VolumeCommand(InputEvent.VolumeDirection.UP))
+            ACTION_VOLUME_DOWN -> manager.dispatch(InputEvent.VolumeCommand(InputEvent.VolumeDirection.DOWN))
         }
 
         ensureNotificationChannel(this)
-        val notification = buildNotification()
+        val name = (manager.connectionState.value as? ConnectionState.Connected)?.deviceName ?: getString(R.string.app_name)
+        val notification = buildNotification(name)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-            )
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-        return START_STICKY
+        // If Android ends the process the connection is gone, so a restarted service would only
+        // show a notification about nothing.
+        return START_NOT_STICKY
     }
 
-    private fun buildNotification(): Notification {
-        val openAppPi = PendingIntent.getActivity(
+    private fun buildNotification(deviceName: String): Notification {
+        val openApp = PendingIntent.getActivity(
             this,
             0,
             Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             },
-            PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val disconnectPi = PendingIntent.getService(
-            this,
-            1,
-            Intent(this, TelepadConnectionService::class.java).apply {
-                action = ACTION_DISCONNECT
-            },
-            PendingIntent.FLAG_IMMUTABLE
-        )
+        fun action(requestCode: Int, action: String, label: Int) = NotificationCompat.Action.Builder(
+            0,
+            getString(label),
+            PendingIntent.getService(
+                this,
+                requestCode,
+                Intent(this, TelepadConnectionService::class.java).setAction(action),
+                PendingIntent.FLAG_IMMUTABLE,
+            ),
+        ).build()
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(getString(R.string.notification_title))
-            .setContentText(getString(R.string.app_name))
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(getString(R.string.notification_title, deviceName))
+            .setContentText(getString(R.string.notification_text))
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setContentIntent(openAppPi)
-            .addAction(0, getString(R.string.notification_disconnect), disconnectPi)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentIntent(openApp)
+            .addAction(action(1, ACTION_PLAY_PAUSE, R.string.notification_play_pause))
+            .addAction(action(2, ACTION_VOLUME_DOWN, R.string.notification_volume_down))
+            .addAction(action(3, ACTION_VOLUME_UP, R.string.notification_volume_up))
+            .addAction(action(4, ACTION_DISCONNECT, R.string.notification_disconnect))
             .build()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
     }
 
     companion object {
         private const val CHANNEL_ID = "telepad_connection"
-        private const val NOTIFICATION_ID = 0xC0FFEE  // arbitrary
+        private const val NOTIFICATION_ID = 0xC0FFEE
         const val ACTION_DISCONNECT = "com.omsingh.telepad.DISCONNECT"
+        const val ACTION_PLAY_PAUSE = "com.omsingh.telepad.PLAY_PAUSE"
+        const val ACTION_VOLUME_UP = "com.omsingh.telepad.VOLUME_UP"
+        const val ACTION_VOLUME_DOWN = "com.omsingh.telepad.VOLUME_DOWN"
 
         fun start(context: Context) {
-            val i = Intent(context, TelepadConnectionService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(i)
-            } else {
-                context.startService(i)
-            }
+            context.startForegroundService(Intent(context, TelepadConnectionService::class.java))
         }
 
         fun stop(context: Context) {
@@ -111,20 +115,17 @@ class TelepadConnectionService : Service() {
         }
 
         fun ensureNotificationChannel(ctx: Context) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-            val mgr = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (mgr.getNotificationChannel(CHANNEL_ID) != null) return
-            val ch = NotificationChannel(
+            val manager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+            val channel = NotificationChannel(
                 CHANNEL_ID,
                 ctx.getString(R.string.notification_channel_name),
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 description = ctx.getString(R.string.notification_channel_description)
                 setShowBadge(false)
             }
-            mgr.createNotificationChannel(ch)
+            manager.createNotificationChannel(channel)
         }
     }
 }
-
-

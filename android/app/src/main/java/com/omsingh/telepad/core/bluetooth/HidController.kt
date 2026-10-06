@@ -1,5 +1,6 @@
 package com.omsingh.telepad.core.bluetooth
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -9,74 +10,67 @@ import android.bluetooth.BluetoothHidDeviceAppSdpSettings
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
+import com.omsingh.telepad.core.input.FailureReason
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 /**
- * Owns the Bluetooth HID Device profile lifecycle and report transmission.
+ * Owns the Bluetooth HID Device profile: registering the phone as a keyboard and
+ * mouse, connecting to a host, and delivering reports.
  *
- * Lifecycle: [init] → callback → [connect] → [send*] → [disconnect] → [cleanup].
+ * **Threading.** One thread, [executor] ("telepad-hid"), does all HID work. The
+ * framework delivers its callbacks there, [HidInputTranslator] keeps its state and sends
+ * its reports there, and nothing blocks the main thread on the Bluetooth service.
  *
- * **Pre-allocated buffers.** Mouse/keyboard/consumer report arrays and the 6KRO
- * active-keys slot table are all instance fields, reused on every send.
- * Per-event allocations on the hot path = zero.
- *
- * **Threading.** All `sendReport` calls happen on a dedicated single-thread
- * executor (`telepad-hid`) so the binder IPC to the system Bluetooth service
- * never runs on the main thread. State changes flow back through [state]
- * StateFlow, safe to collect from any context.
- *
- * **OEM compatibility caveat.** `BluetoothHidDevice` is documented in AOSP but
- * historically shipped *disabled* on many pre-Pixel OEM builds (the manifest
- * boolean `profile_supported_hidd` defaulted to false). [registerApp] returning
- * false is the strongest runtime signal we have for this — surface that to the
- * UI as `HidState.Error` so the user knows to switch to Wi-Fi mode.
- *
- * **HID interrupt channel.** `sendReport` uses the *interrupt* L2CAP channel
- * which is the correct low-latency channel for input. Radio TX is async from
- * the caller's perspective — we return immediately and the kernel queues.
+ * **Device support.** `BluetoothHidDevice` exists in AOSP but many manufacturers ship
+ * it disabled, and only one app at a time can hold the HID Device role. Both show up
+ * as a failure to obtain or register the profile, reported as a [FailureReason] the
+ * UI can explain.
  */
 @SuppressLint("MissingPermission")
-class HidController(val context: Context) {
+class HidController(private val context: Context) : HidReportSink {
 
     /** Externally observable state of the HID stack. */
     sealed interface HidState {
         data object Uninitialized : HidState
-        data object Ready         : HidState
-        data object Connecting    : HidState
+        data object Ready : HidState
+        data object Connecting : HidState
         data class Connected(val deviceName: String) : HidState
-        data class Error(val message: String) : HidState
+        data class Failed(val reason: FailureReason) : HidState
     }
 
     private val _state = MutableStateFlow<HidState>(HidState.Uninitialized)
     val state: StateFlow<HidState> = _state.asStateFlow()
 
-    private val bluetoothManager = context.getSystemService(
-        Context.BLUETOOTH_SERVICE
-    ) as BluetoothManager
-    private val adapter: BluetoothAdapter? = bluetoothManager.adapter
-    private var hidProfile: BluetoothHidDevice? = null
-    private var connectedDevice: BluetoothDevice? = null
-
-    private val executor = Executors.newSingleThreadExecutor { r ->
+    /** The thread everything HID runs on. Scheduled so that timed releases can be queued. */
+    val executor = ScheduledThreadPoolExecutor(1) { r ->
         Thread(r, "telepad-hid").apply {
             priority = Thread.NORM_PRIORITY + 2
             isDaemon = true
         }
-    }
+    }.apply { removeOnCancelPolicy = true }
 
-    // ── Pre-allocated report buffers ─────────────────────────────────
-    private val mouseReport    = ByteArray(HidReportDescriptor.MOUSE_REPORT_SIZE)
-    private val keyboardReport = ByteArray(HidReportDescriptor.KEYBOARD_REPORT_SIZE)
-    private val consumerReport = ByteArray(HidReportDescriptor.CONSUMER_REPORT_SIZE)
-    /** Active 6KRO slots. 0 = empty. Modifier bits live separately in keyboardReport[0]. */
-    private val activeKeys = IntArray(6)
-    private var currentModifiers = 0
+    private val adapter: BluetoothAdapter? =
+        (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
 
-    // ── HID device-descriptor metadata ───────────────────────────────
+    @Volatile private var hidProfile: BluetoothHidDevice? = null
+    @Volatile private var connectedDevice: BluetoothDevice? = null
+    @Volatile private var registered = false
+    private var pendingReady: (() -> Unit)? = null
+    private var pendingFailure: ((FailureReason) -> Unit)? = null
+    private var connectTimeout: ScheduledFuture<*>? = null
+    private var registerTimeout: ScheduledFuture<*>? = null
+
+    override val isConnected: Boolean get() = connectedDevice != null && hidProfile != null
+
     private val sdpSettings = BluetoothHidDeviceAppSdpSettings(
         "Telepad",
         "Phone remote touchpad and keyboard",
@@ -86,84 +80,176 @@ class HidController(val context: Context) {
     )
 
     /**
-     * QoS = best-effort with latency tuned for HID.
-     * Token rate / bucket are small (HID traffic is tiny). Access latency and
-     * delay variation are 11.25 ms — the Bluetooth Core spec's minimum
-     * connection interval. Hosts can negotiate lower; this is the upper bound
-     * the firmware will respect.
+     * Best effort with the lowest latency the Bluetooth core spec allows (11.25 ms).
+     * HID traffic is tiny, so the token bucket is too.
      */
     private val qosSettings = BluetoothHidDeviceAppQosSettings(
         BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT,
-        /* tokenRate     */ 800,
+        /* tokenRate */ 800,
         /* tokenBucketSize */ 9,
         /* peakBandwidth */ 0,
-        /* latency       */ 11250,
-        /* delayVariation*/ 11250
+        /* latency */ 11250,
+        /* delayVariation */ 11250
     )
 
-    /**
-     * Acquire the HID Device profile proxy and register our descriptor.
-     *
-     * @param onReady invoked when registration succeeds and we're ready to [connect].
-     * @param onError invoked with a human-readable reason on any failure.
-     */
-    fun init(onReady: () -> Unit, onError: (String) -> Unit) {
-        val a = adapter ?: run { onError("Bluetooth unavailable"); return }
-        if (!a.isEnabled) { onError("Bluetooth is off"); return }
+    // ── Preconditions ────────────────────────────────────────────────
 
-        a.getProfileProxy(context, object : BluetoothProfile.ServiceListener {
+    /** Whether the runtime permission needed to talk to paired devices is held. */
+    fun hasConnectPermission(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
+            PackageManager.PERMISSION_GRANTED
+
+    val hasAdapter: Boolean get() = adapter != null
+
+    val isEnabled: Boolean get() = adapter?.isEnabled == true
+
+    /** Phones this one has been paired with in Android's Bluetooth settings. */
+    fun bondedDevices(): List<BluetoothDevice> =
+        try {
+            adapter?.bondedDevices?.toList().orEmpty()
+        } catch (_: SecurityException) {
+            emptyList()
+        }
+
+    fun device(address: String): BluetoothDevice? =
+        try {
+            adapter?.getRemoteDevice(address)
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+
+    // ── Lifecycle ────────────────────────────────────────────────────
+
+    /**
+     * Gets the HID Device profile and registers this phone's descriptor.
+     * [onReady] runs once the framework confirms the registration; [onFailure] says why not.
+     */
+    fun init(onReady: () -> Unit, onFailure: (FailureReason) -> Unit) {
+        val a = adapter ?: return onFailure(FailureReason.BLUETOOTH_UNSUPPORTED)
+        if (!hasConnectPermission()) return onFailure(FailureReason.BLUETOOTH_PERMISSION)
+        if (!a.isEnabled) return onFailure(FailureReason.BLUETOOTH_DISABLED)
+        if (registered && hidProfile != null) return onReady()
+
+        pendingReady = onReady
+        pendingFailure = onFailure
+
+        val obtained = a.getProfileProxy(context, object : BluetoothProfile.ServiceListener {
             override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
                 if (profile != BluetoothProfile.HID_DEVICE) return
                 val p = proxy as BluetoothHidDevice
                 hidProfile = p
-                val ok = try {
+                val accepted = try {
                     p.registerApp(sdpSettings, null, qosSettings, executor, profileCallback)
                 } catch (e: SecurityException) {
-                    onError("Bluetooth permission denied")
+                    failInit(FailureReason.BLUETOOTH_PERMISSION)
                     return
                 }
-                if (!ok) {
-                    val msg = "HID Device profile not supported on this device " +
-                              "(your manufacturer may have disabled it)"
-                    _state.value = HidState.Error(msg)
-                    onError(msg)
-                } else {
-                    _state.value = HidState.Ready
-                    onReady()
+                if (!accepted) {
+                    failInit(FailureReason.BLUETOOTH_FAILED)
+                    return
+                }
+                // `registerApp` only means the request was taken; wait for the confirmation.
+                registerTimeout = executor.schedule({
+                    if (!registered) failInit(FailureReason.BLUETOOTH_FAILED)
+                }, REGISTER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            }
+
+            override fun onServiceDisconnected(profile: Int) {
+                if (profile == BluetoothProfile.HID_DEVICE) {
+                    hidProfile = null
+                    registered = false
+                    connectedDevice = null
+                    _state.value = HidState.Uninitialized
                 }
             }
-            override fun onServiceDisconnected(profile: Int) {
-                if (profile == BluetoothProfile.HID_DEVICE) hidProfile = null
-            }
         }, BluetoothProfile.HID_DEVICE)
+
+        if (!obtained) failInit(FailureReason.BLUETOOTH_UNSUPPORTED)
+    }
+
+    private fun failInit(reason: FailureReason) {
+        registerTimeout?.cancel(false)
+        val callback = pendingFailure
+        pendingReady = null
+        pendingFailure = null
+        _state.value = HidState.Failed(reason)
+        callback?.invoke(reason)
     }
 
     private val profileCallback = object : BluetoothHidDevice.Callback() {
+
+        override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, registered: Boolean) {
+            this@HidController.registered = registered
+            if (registered) {
+                registerTimeout?.cancel(false)
+                _state.value = HidState.Ready
+                val callback = pendingReady
+                pendingReady = null
+                pendingFailure = null
+                callback?.invoke()
+            } else {
+                connectedDevice = null
+                if (_state.value !is HidState.Failed) _state.value = HidState.Uninitialized
+            }
+        }
+
         override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
-            super.onConnectionStateChanged(device, state)
             when (state) {
                 BluetoothProfile.STATE_CONNECTING -> _state.value = HidState.Connecting
-                BluetoothProfile.STATE_CONNECTED  -> {
+                BluetoothProfile.STATE_CONNECTED -> {
+                    connectTimeout?.cancel(false)
                     connectedDevice = device
-                    _state.value = HidState.Connected(deviceLabel(device))
+                    _state.value = HidState.Connected(labelOf(device))
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
+                    connectTimeout?.cancel(false)
+                    val wasConnected = connectedDevice != null
                     connectedDevice = null
-                    releaseAllKeys()
-                    releaseConsumer()
-                    _state.value = HidState.Ready
+                    // A connection that never came up is a failure; one that ended is just over.
+                    _state.value = if (wasConnected || _state.value !is HidState.Connecting) {
+                        HidState.Ready
+                    } else {
+                        HidState.Failed(FailureReason.BLUETOOTH_FAILED)
+                    }
                 }
+            }
+        }
+
+        // The host asks for a report we never keep: say so, rather than leave it waiting.
+        override fun onGetReport(device: BluetoothDevice, type: Byte, id: Byte, bufferSize: Int) {
+            try {
+                hidProfile?.reportError(device, BluetoothHidDevice.ERROR_RSP_UNSUPPORTED_REQ)
+            } catch (_: SecurityException) {
+            }
+        }
+
+        // The host sets keyboard LEDs (Caps Lock and the like) and expects an answer.
+        override fun onSetReport(device: BluetoothDevice, type: Byte, id: Byte, data: ByteArray) {
+            try {
+                hidProfile?.reportError(device, BluetoothHidDevice.ERROR_RSP_SUCCESS)
+            } catch (_: SecurityException) {
             }
         }
     }
 
+    /** Asks the host to connect. The result arrives through [state]. */
     fun connect(device: BluetoothDevice) {
         _state.value = HidState.Connecting
+        connectTimeout?.cancel(false)
+        connectTimeout = executor.schedule({
+            if (_state.value is HidState.Connecting) {
+                _state.value = HidState.Failed(FailureReason.BLUETOOTH_FAILED)
+            }
+        }, CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         executor.execute {
             try {
-                hidProfile?.connect(device)
+                val asked = hidProfile?.connect(device) ?: false
+                if (!asked && _state.value is HidState.Connecting) {
+                    _state.value = HidState.Failed(FailureReason.BLUETOOTH_FAILED)
+                }
             } catch (e: SecurityException) {
-                _state.value = HidState.Error("Bluetooth permission denied")
+                _state.value = HidState.Failed(FailureReason.BLUETOOTH_PERMISSION)
             }
         }
     }
@@ -172,132 +258,58 @@ class HidController(val context: Context) {
         executor.execute {
             try {
                 connectedDevice?.let { hidProfile?.disconnect(it) }
-            } catch (_: SecurityException) { /* permission revoked mid-flight */ }
+            } catch (_: SecurityException) {
+                // Permission revoked mid-flight.
+            }
             connectedDevice = null
+            if (_state.value !is HidState.Failed && registered) _state.value = HidState.Ready
+        }
+    }
+
+    /** Forgets a failure so the next attempt starts clean. */
+    fun clearFailure() {
+        if (_state.value is HidState.Failed) {
+            _state.value = if (registered) HidState.Ready else HidState.Uninitialized
         }
     }
 
     fun cleanup() {
         try {
-            disconnect()
+            connectedDevice?.let { hidProfile?.disconnect(it) }
             hidProfile?.unregisterApp()
             adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hidProfile)
-        } catch (_: Exception) { /* best-effort shutdown */ }
+        } catch (_: Exception) {
+            // Best-effort shutdown.
+        }
+        hidProfile = null
+        registered = false
+        connectedDevice = null
         executor.shutdownNow()
     }
 
-    // ═════════════════════ HOT PATH: report TX ═════════════════════
+    // ── Report transmission (executor thread) ────────────────────────
 
-    /**
-     * Send a mouse report: 3-bit button bitmap, 16-bit relative X, 16-bit Y, 8-bit wheel.
-     * All values are coerced to the descriptor's logical range.
-     */
-    fun sendMouseReport(buttons: Int, dx: Int, dy: Int, wheel: Int) {
+    override fun send(reportId: Int, data: ByteArray) {
         val device = connectedDevice ?: return
-        val r = mouseReport
-        r[0] = (buttons and 0x07).toByte()
-        val x = dx.coerceIn(-32767, 32767)
-        val y = dy.coerceIn(-32767, 32767)
-        // Little-endian write.
-        r[1] = (x and 0xFF).toByte()
-        r[2] = ((x ushr 8) and 0xFF).toByte()
-        r[3] = (y and 0xFF).toByte()
-        r[4] = ((y ushr 8) and 0xFF).toByte()
-        r[5] = wheel.coerceIn(-127, 127).toByte()
-        trySend(device, HidReportDescriptor.REPORT_ID_MOUSE, r)
-    }
-
-    /**
-     * Press a key.
-     *  - If [hidCode] is 0xE0..0xE7, it's a modifier — OR its bit into the modifier
-     *    byte rather than putting it in a key slot.
-     *  - Otherwise, find the first empty 6KRO slot.
-     *  - If all 6 slots are full, emit an all-error rollover report per HID spec.
-     */
-    fun pressKey(hidCode: Int, modifiers: Int) {
-        currentModifiers = modifiers
-        if (hidCode in 0xE0..0xE7) {
-            val bit = 1 shl (hidCode - 0xE0)
-            currentModifiers = currentModifiers or bit
-            sendKeyboard(currentModifiers, activeKeys)
-            return
-        }
-        for (i in activeKeys.indices) if (activeKeys[i] == hidCode) return // already pressed
-        for (i in activeKeys.indices) {
-            if (activeKeys[i] == 0) {
-                activeKeys[i] = hidCode
-                sendKeyboard(currentModifiers, activeKeys)
-                return
-            }
-        }
-        // Rollover — fill all slots with the ErrorRollOver value.
-        sendKeyboard(currentModifiers, ROLLOVER_KEYS)
-    }
-
-    fun releaseKey(hidCode: Int, modifiers: Int) {
-        currentModifiers = modifiers
-        if (hidCode in 0xE0..0xE7) {
-            val bit = 1 shl (hidCode - 0xE0)
-            currentModifiers = currentModifiers and bit.inv()
-            sendKeyboard(currentModifiers, activeKeys)
-            return
-        }
-        for (i in activeKeys.indices) {
-            if (activeKeys[i] == hidCode) {
-                activeKeys[i] = 0
-                break
-            }
-        }
-        sendKeyboard(currentModifiers, activeKeys)
-    }
-
-    fun releaseAllKeys() {
-        for (i in activeKeys.indices) activeKeys[i] = 0
-        currentModifiers = 0
-        sendKeyboard(0, activeKeys)
-    }
-
-    private fun sendKeyboard(modifiers: Int, keys: IntArray) {
-        val device = connectedDevice ?: return
-        val r = keyboardReport
-        r[0] = (modifiers and 0xFF).toByte()
-        r[1] = 0
-        for (i in 0..5) r[2 + i] = (keys[i] and 0xFF).toByte()
-        trySend(device, HidReportDescriptor.REPORT_ID_KEYBOARD, r)
-    }
-
-    /** Press a Consumer Control usage. Caller must follow with [releaseConsumer]. */
-    fun sendConsumer(usage: Int) {
-        val device = connectedDevice ?: return
-        consumerReport[0] = (usage and 0xFF).toByte()
-        consumerReport[1] = ((usage ushr 8) and 0xFF).toByte()
-        trySend(device, HidReportDescriptor.REPORT_ID_CONSUMER, consumerReport)
-    }
-
-    /** Release the currently-pressed Consumer Control by sending an all-zero report. */
-    fun releaseConsumer() {
-        val device = connectedDevice ?: return
-        consumerReport[0] = 0
-        consumerReport[1] = 0
-        trySend(device, HidReportDescriptor.REPORT_ID_CONSUMER, consumerReport)
-    }
-
-    private fun trySend(device: BluetoothDevice, reportId: Int, data: ByteArray) {
         try {
             hidProfile?.sendReport(device, reportId, data)
         } catch (_: SecurityException) {
-            // Permission revoked mid-flight — connection will die shortly.
+            // Permission revoked mid-flight: the connection will end shortly.
         } catch (t: Throwable) {
-            Log.w(TAG, "sendReport failed: ${t.message}")
+            Log.w(TAG, "sendReport failed: ${t.javaClass.simpleName}")
         }
     }
 
-    private fun deviceLabel(device: BluetoothDevice): String =
-        try { device.name ?: device.address } catch (_: SecurityException) { device.address }
+    private fun labelOf(device: BluetoothDevice): String =
+        try {
+            device.name ?: device.address
+        } catch (_: SecurityException) {
+            device.address
+        }
 
     private companion object {
         const val TAG = "HidController"
-        /** Used to indicate 6KRO rollover per HID spec — all slots = 0x01 (ErrorRollOver). */
-        val ROLLOVER_KEYS = IntArray(6) { 0x01 }
+        const val REGISTER_TIMEOUT_MS = 6_000L
+        const val CONNECT_TIMEOUT_MS = 20_000L
     }
 }

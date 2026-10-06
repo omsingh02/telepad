@@ -1,7 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Splash + system bar transition theme. Compose owns the rest. -->
-    <style name="Theme.Telepad" parent="android:Theme.Material.NoActionBar">
+
+    <!-- What the window looks like before Compose draws: the system splash screen, in the
+         colours of the app's own surface so that nothing flashes. -->
+    <style name="Theme.Telepad.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/ic_launcher_background</item>
+        <item name="postSplashScreenTheme">@style/Theme.Telepad</item>
+    </style>
+
+    <!-- The theme the activity runs with. Compose draws everything; this only sets the window. -->
+    <style name="Theme.Telepad" parent="android:Theme.DeviceDefault.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">@color/splash_background</item>

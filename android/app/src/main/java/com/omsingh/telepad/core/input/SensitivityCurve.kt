@@ -14,8 +14,8 @@ import kotlin.math.sign
  * @param baseSensitivity Linear multiplier applied last. 1.0 = unit gain.
  * @param curve Which acceleration shape to apply.
  *
- * **Thread safety:** Not thread-safe. Owned by a single [TouchpadProcessor]
- * which serializes all access on the input handler thread.
+ * **Thread safety:** Not thread-safe. It is owned by one [GestureEngine], which is used
+ * from a single thread (the UI thread).
  */
 class SensitivityCurve(
     var baseSensitivity: Float = 1.6f,
