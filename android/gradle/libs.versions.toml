@@ -6,7 +6,7 @@ coreKtx = "1.13.1"
 splashscreen = "1.0.1"
 lifecycle = "2.8.6"
 activityCompose = "1.9.2"
-composeBom = "2024.09.03"
+composeBom = "2026.09.00"
 navigationCompose = "2.8.2"
 
 datastore = "1.1.1"
