@@ -1,7 +1,11 @@
 # Maintainer: omsingh02 (https://github.com/omsingh02)
 #
-# Telepad for Arch Linux, from the release tarball. Publish it to the AUR as `telepad-bin`:
-# scripts/update-package-manifests.sh <tag> fills in pkgver and the checksum from a release.
+# Telepad for Arch Linux, from the release tarball. Build and install it from a clone of the repository:
+#
+#     cd packaging/arch && makepkg -si
+#
+# It can be published to the AUR as `telepad-bin` too. scripts/update-package-manifests.sh <tag> fills in pkgver and
+# the checksum from a release (the release script runs it).
 pkgname=telepad-bin
 _tag=v2.0.0-alpha.2
 pkgver=2.0.0_alpha.2

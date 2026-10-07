@@ -299,6 +299,7 @@ The network code is tested end to end against a stand-in PC that speaks the real
    - **Windows:** run `telepad-windows-x86_64-setup.exe`. It installs for you only (no administrator prompt), adds Telepad to the Start menu, and offers to start it when you sign in.
    - **macOS:** open `telepad-macos-universal.dmg` and drag **Telepad** onto **Applications**, then open it. Allow the Accessibility request: without it macOS discards what the phone types and clicks.
    - **Linux:** unpack `telepad-linux-x86_64.tar.gz` and run `./install.sh` (it installs into `~/.local`, no root needed), then open Telepad from your applications menu. Linux needs a one-time permission for `/dev/uinput` first: see [Linux](#linux).
+   - **Arch Linux:** build the package from this repository, which also sets up `/dev/uinput` for you: `git clone https://github.com/omsingh02/telepad && cd telepad/packaging/arch && makepkg -si`. (It is not on the AUR yet.)
 
    Telepad now sits in the tray, and the first time it opens a page with a **QR code** (click its icon, then **Pair a phone…**, to see it again).
 
