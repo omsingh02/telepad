@@ -1,0 +1,10 @@
+# Lets the person at this computer create the virtual mouse and keyboard Telepad types with (/dev/uinput), without
+# being in a special group and without running Telepad as root. "uaccess" gives access to whoever is logged in at
+# the seat, and takes it away when they log out.
+#
+#   sudo install -m644 60-telepad-uinput.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload && sudo udevadm trigger
+#
+# The kernel module has to be loaded too (it is on most desktops): `sudo modprobe uinput`, and to keep it loaded at
+# every boot: `echo uinput | sudo tee /etc/modules-load.d/telepad.conf`.
+KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"

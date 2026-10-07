@@ -1,0 +1,36 @@
+# Maintainer: omsingh02 (https://github.com/omsingh02)
+#
+# Telepad for Arch Linux, from the release tarball. Publish it to the AUR as `telepad-bin`:
+# scripts/update-package-manifests.sh <tag> fills in pkgver and the checksum from a release.
+pkgname=telepad-bin
+_tag=v2.0.0-alpha.2
+pkgver=2.0.0_alpha.2
+pkgrel=1
+pkgdesc="Use your Android phone as a trackpad, keyboard and media remote for this computer"
+arch=('x86_64')
+url="https://github.com/omsingh02/telepad"
+license=('MIT')
+depends=('gcc-libs' 'glibc' 'libxcb')
+optdepends=('gnome-shell-extension-appindicator: the tray icon on GNOME')
+provides=('telepad')
+conflicts=('telepad')
+source=("$pkgname-$pkgver.tar.gz::$url/releases/download/${_tag}/telepad-${_tag}-linux-x86_64.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  cd "telepad-${_tag}-linux-x86_64"
+
+  install -Dm755 telepad "$pkgdir/usr/bin/telepad"
+  install -Dm644 telepad.desktop "$pkgdir/usr/share/applications/telepad.desktop"
+  install -Dm644 telepad.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/telepad.svg"
+  for size in 16 24 32 48 64 128 256 512; do
+    install -Dm644 "icons/telepad-$size.png" "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/telepad.png"
+  done
+
+  # The virtual keyboard and mouse: the kernel module at boot, and access for whoever is at the seat.
+  install -Dm644 60-telepad-uinput.rules "$pkgdir/usr/lib/udev/rules.d/60-telepad-uinput.rules"
+  echo uinput | install -Dm644 /dev/stdin "$pkgdir/usr/lib/modules-load.d/telepad.conf"
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 THIRD_PARTY_LICENSES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_LICENSES.md"
+}

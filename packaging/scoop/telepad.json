@@ -1,0 +1,23 @@
+{
+    "version": "2.0.0-alpha.2",
+    "description": "Use your Android phone as a trackpad, keyboard and media remote for this computer",
+    "homepage": "https://telepad-app.vercel.app",
+    "license": "MIT",
+    "url": "https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.2/telepad-v2.0.0-alpha.2-windows-x86_64.exe#/telepad.exe",
+    "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "bin": "telepad.exe",
+    "shortcuts": [
+        [
+            "telepad.exe",
+            "Telepad"
+        ]
+    ],
+    "notes": "Telepad is in the tray. Click its icon, then \"Pair a phone...\", and scan the QR code with the Telepad app. \"Start at login\" is in its menu.",
+    "checkver": {
+        "github": "https://github.com/omsingh02/telepad",
+        "regex": "tag/v([\\d.]+(?:-[\\w.]+)?)"
+    },
+    "autoupdate": {
+        "url": "https://github.com/omsingh02/telepad/releases/download/v$version/telepad-v$version-windows-x86_64.exe#/telepad.exe"
+    }
+}

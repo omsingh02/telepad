@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: omsingh02.Telepad
+PackageVersion: 2.0.0-alpha.2
+PackageLocale: en-US
+Publisher: Om Singh
+PublisherUrl: https://github.com/omsingh02
+PublisherSupportUrl: https://github.com/omsingh02/telepad/issues
+PrivacyUrl: https://github.com/omsingh02/telepad/blob/main/PRIVACY.md
+Author: Om Singh
+PackageName: Telepad
+PackageUrl: https://telepad-app.vercel.app
+License: MIT
+LicenseUrl: https://github.com/omsingh02/telepad/blob/main/LICENSE
+Copyright: Copyright (c) Om Singh
+ShortDescription: Use your Android phone as a trackpad, keyboard and media remote for this computer.
+Description: Telepad turns an Android phone into a wireless trackpad, keyboard and media remote for a Windows, Linux or macOS computer, over a local Wi-Fi network or Bluetooth. This is the program for the PC. It sits in the tray and shows a QR code that a phone scans to pair. Everything is end-to-end encrypted, and nothing is sent to any server.
+Moniker: telepad
+Tags:
+  - android
+  - keyboard
+  - remote-control
+  - touchpad
+  - trackpad
+ReleaseNotesUrl: https://github.com/omsingh02/telepad/releases/tag/v2.0.0-alpha.2
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

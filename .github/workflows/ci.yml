@@ -38,6 +38,7 @@ jobs:
               - 'Cargo.lock'
               - 'rust-toolchain.toml'
               - '.cargo/**'
+              - 'packaging/**'
               - '.github/workflows/ci.yml'
 
   android:
@@ -86,7 +87,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev
+          sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev desktop-file-utils
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
@@ -104,5 +105,55 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Run Cargo Tests
         run: cargo test --workspace --locked --verbose
-      - name: Build Rust Server Release
-        run: cargo build --release --locked --bin telepad-server
+      # CI is set, so on Windows a build that cannot embed the icon and version information fails.
+      - name: Build the apps (release)
+        run: cargo build --release --locked --bin telepad --bin telepad-server
+
+      # The packages are made from what was just built, the way a release makes them and installed the way a
+      # person would, so that a mistake in the packaging shows up here and not after a tag is pushed.
+      - name: Check the Linux package
+        if: runner.os == 'Linux'
+        run: |
+          desktop-file-validate packaging/linux/telepad.desktop
+          bash packaging/linux/package.sh telepad-ci-linux-x86_64 target/release/telepad "$RUNNER_TEMP/dist"
+          mkdir -p "$RUNNER_TEMP/unpacked" "$RUNNER_TEMP/home"
+          tar -xzf "$RUNNER_TEMP/dist/telepad-ci-linux-x86_64.tar.gz" -C "$RUNNER_TEMP/unpacked"
+          export HOME="$RUNNER_TEMP/home" XDG_CONFIG_HOME="$RUNNER_TEMP/home/.config"
+          "$RUNNER_TEMP/unpacked/telepad-ci-linux-x86_64/install.sh"
+          "$HOME/.local/bin/telepad" --version
+          desktop-file-validate "$HOME/.local/share/applications/telepad.desktop"
+          "$RUNNER_TEMP/unpacked/telepad-ci-linux-x86_64/install.sh" --uninstall
+          test ! -e "$HOME/.local/bin/telepad"
+
+      - name: Check the macOS package
+        if: runner.os == 'macOS'
+        run: |
+          bash packaging/macos/make-app.sh 0.0.0 target/release/telepad "$RUNNER_TEMP/app"
+          bash packaging/macos/sign-and-notarize.sh app "$RUNNER_TEMP/app/Telepad.app"
+          bash packaging/macos/make-dmg.sh telepad-ci-macos "$RUNNER_TEMP/app/Telepad.app" "$RUNNER_TEMP/dist"
+          "$RUNNER_TEMP/app/Telepad.app/Contents/MacOS/telepad" --version
+
+      - name: Check the Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $info = (Get-Item target/release/telepad.exe).VersionInfo
+          if ($info.FileDescription -ne 'Telepad') { throw "telepad.exe has no version information" }
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y | Out-Host }
+          $dist = Join-Path $env:RUNNER_TEMP 'dist'
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+          & $iscc "/DVersion=0.0.0" "/DSource=$PWD\target\release\telepad.exe" "/DOutputDir=$dist" "/DOutputName=telepad-ci-setup" packaging\windows\telepad.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+
+          # Install, look, uninstall: what a person does, without the clicks.
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\Telepad'
+          Start-Process -FilePath (Join-Path $dist 'telepad-ci-setup.exe') -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=autostart' -Wait
+          if (-not (Test-Path "$dir\telepad.exe")) { throw "the installer did not install telepad.exe" }
+          $run = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').Telepad
+          if ($run -ne "`"$dir\telepad.exe`" --background") { throw "the start-at-sign-in entry is wrong: $run" }
+          Start-Process -FilePath "$dir\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+          # The uninstaller hands over to a copy of itself and returns at once, so wait for the files to go.
+          for ($i = 0; $i -lt 60 -and (Test-Path "$dir\telepad.exe"); $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path "$dir\telepad.exe") { throw "the uninstaller did not remove telepad.exe" }
+          if ((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').Telepad) { throw "the start-at-sign-in entry was left behind" }

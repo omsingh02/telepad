@@ -35,6 +35,15 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
+      # The desktop programs ship with the licenses of the libraries inside them, which come from Cargo.lock.
+      - name: Install cargo-about
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/install-ci-tool.sh EmbarkStudios/cargo-about 0.9.2 cargo-about
+
+      - name: Check the third-party license notice is current
+        run: scripts/update-licenses.sh --check
+
       - name: Compare the tag with the app and server versions
         run: |
           VERSION="${TAG#v}"
@@ -114,17 +123,22 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: telepad-android-apk
+          name: release-android
           path: dist/*.apk
           retention-days: 7
 
-  build-server-windows:
-    name: Build Windows Desktop Server
+  build-desktop-windows:
+    name: Build Windows Desktop Apps
     needs: check-version
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     permissions:
       contents: read
+    env:
+      # Signing is switched on by adding these (see docs/code-signing.md); without them the build is unsigned.
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+    outputs:
+      signed: ${{ steps.signed.outputs.signed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -141,35 +155,120 @@ jobs:
       - name: Run Cargo Tests (Release Test Gate)
         run: cargo test --workspace --locked --verbose
 
-      - name: Build Rust Server Release
-        run: cargo build --release --locked --bin telepad-server
+      # CI is set, so a build that cannot embed the icon and version information fails instead of shipping without.
+      - name: Build the apps
+        run: cargo build --release --locked --bin telepad --bin telepad-server
 
-      - name: Stage Windows binary
+      - name: Check the program has its icon and name
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist
-          $exePath = "target/release/telepad-server.exe"
-          if (-not (Test-Path $exePath)) {
-            Write-Error "Windows binary not found at $exePath"
-            exit 1
-          }
-          $standaloneExe = "dist/telepad-server-${env:TAG}-windows-x86_64.exe"
-          Copy-Item $exePath $standaloneExe
-          $zipPath = "dist/telepad-server-${env:TAG}-windows-x86_64.zip"
-          Compress-Archive -Path $exePath -DestinationPath $zipPath -Force
-          Get-ChildItem dist
+          $info = (Get-Item target/release/telepad.exe).VersionInfo
+          Write-Host "ProductName=$($info.ProductName) FileDescription=$($info.FileDescription) Version=$($info.FileVersion)"
+          if ($info.FileDescription -ne 'Telepad') { throw "telepad.exe has no version information" }
 
-      - name: Upload Windows Server artifact
+      # --- Signing the programs (only when the SignPath account is set up) -----------------------------
+      - name: Collect the programs to sign
+        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path unsigned | Out-Null
+          Copy-Item target/release/telepad.exe, target/release/telepad-server.exe unsigned/
+
+      - name: Upload the programs to sign
+        id: unsigned-programs
+        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: telepad-server-windows
+          name: unsigned-windows-programs
+          path: unsigned/*.exe
+          retention-days: 1
+
+      - name: Sign the programs (SignPath)
+        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'telepad' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: programs
+          github-artifact-id: ${{ steps.unsigned-programs.outputs.artifact-id }}
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed-programs
+
+      - name: Use the signed programs
+        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
+        shell: pwsh
+        run: Copy-Item signed-programs/*.exe target/release/ -Force
+
+      # --- The installer, from the programs above (signed or not) ---------------------------------------
+      - name: Build the installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $version = ($env:TAG -replace '^v', '') -replace '-.*$', ''
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y | Out-Host }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          & $iscc "/DVersion=$version" "/DSource=$PWD\target\release\telepad.exe" "/DOutputDir=$PWD\dist" "/DOutputName=telepad-$($env:TAG)-windows-x86_64-setup" packaging\windows\telepad.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+
+      - name: Upload the installer to sign
+        id: unsigned-installer
+        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-windows-installer
+          path: dist/*-setup.exe
+          retention-days: 1
+
+      - name: Sign the installer (SignPath)
+        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'telepad' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed-installer
+
+      - name: Use the signed installer
+        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
+        shell: pwsh
+        run: Copy-Item signed-installer/*-setup.exe dist/ -Force
+
+      - name: Record whether this build is signed
+        id: signed
+        shell: pwsh
+        run: |
+          $signed = if ($env:SIGNPATH_API_TOKEN) { 'true' } else { 'false' }
+          "signed=$signed" >> $env:GITHUB_OUTPUT
+
+      - name: Stage Windows files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          foreach ($exe in 'telepad.exe', 'telepad-server.exe') {
+            if (-not (Test-Path "target/release/$exe")) { throw "Windows binary not found: target/release/$exe" }
+          }
+          Copy-Item target/release/telepad.exe "dist/telepad-${env:TAG}-windows-x86_64.exe"
+          Copy-Item target/release/telepad-server.exe "dist/telepad-server-${env:TAG}-windows-x86_64.exe"
+          Compress-Archive -Path target/release/telepad-server.exe, LICENSE, THIRD_PARTY_LICENSES.md -DestinationPath "dist/telepad-server-${env:TAG}-windows-x86_64.zip" -Force
+          Get-ChildItem dist
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-windows
           path: |
             dist/*.exe
             dist/*.zip
           retention-days: 7
 
-  build-server-linux:
-    name: Build Linux Desktop Server
+  build-desktop-linux:
+    name: Build Linux Desktop Apps
     needs: check-version
     runs-on: ubuntu-22.04
     timeout-minutes: 20
@@ -196,35 +295,48 @@ jobs:
       - name: Run Cargo Tests (Release Test Gate)
         run: cargo test --workspace --locked --verbose
 
-      - name: Build Rust Server Release
-        run: cargo build --release --locked --bin telepad-server
+      - name: Build the apps
+        run: cargo build --release --locked --bin telepad --bin telepad-server
 
-      - name: Stage Linux binary
+      - name: Package
         run: |
           mkdir -p dist
-          BIN_PATH="target/release/telepad-server"
-          if [ ! -f "$BIN_PATH" ]; then
-            echo "::error::Linux binary not found at $BIN_PATH"
-            exit 1
-          fi
-          chmod +x "$BIN_PATH"
-          tar -czvf "dist/telepad-server-${TAG}-linux-x86_64.tar.gz" -C target/release telepad-server
+          for bin in telepad telepad-server; do
+            if [ ! -f "target/release/$bin" ]; then
+              echo "::error::Linux binary not found at target/release/$bin"
+              exit 1
+            fi
+            chmod +x "target/release/$bin"
+          done
+          bash packaging/linux/package.sh "telepad-${TAG}-linux-x86_64" target/release/telepad dist
+          tar -czvf "dist/telepad-server-${TAG}-linux-x86_64.tar.gz" -C target/release telepad-server -C "$PWD" LICENSE THIRD_PARTY_LICENSES.md
           ls -la dist
 
-      - name: Upload Linux Server artifact
+      - name: Upload Linux artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: telepad-server-linux
+          name: release-linux
           path: dist/*.tar.gz
           retention-days: 7
 
-  build-server-macos:
-    name: Build macOS Desktop Server (universal)
+  build-desktop-macos:
+    name: Build macOS Desktop Apps (universal)
     needs: check-version
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
+    env:
+      # Signing and notarization are switched on by adding these (see docs/code-signing.md); without them the
+      # app is only ad-hoc signed and macOS asks the person to allow it.
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+    outputs:
+      signed: ${{ steps.signed.outputs.signed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -244,34 +356,72 @@ jobs:
 
       - name: Build both architectures
         run: |
-          cargo build --release --locked --bin telepad-server --target aarch64-apple-darwin
-          cargo build --release --locked --bin telepad-server --target x86_64-apple-darwin
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo build --release --locked --bin telepad --bin telepad-server --target "$target"
+          done
 
-      - name: Create universal binary
+      - name: Create universal binaries
         run: |
-          mkdir -p dist
-          lipo -create -output target/telepad-server \
-            target/aarch64-apple-darwin/release/telepad-server \
-            target/x86_64-apple-darwin/release/telepad-server
-          lipo -info target/telepad-server
-          chmod +x target/telepad-server
-          tar -czvf "dist/telepad-server-${TAG}-macos-universal.tar.gz" -C target telepad-server
-          ls -la dist
+          mkdir -p dist universal
+          for bin in telepad telepad-server; do
+            lipo -create -output "universal/$bin" \
+              "target/aarch64-apple-darwin/release/$bin" \
+              "target/x86_64-apple-darwin/release/$bin"
+            lipo -info "universal/$bin"
+            chmod +x "universal/$bin"
+          done
+          tar -czvf "dist/telepad-server-${TAG}-macos-universal.tar.gz" -C universal telepad-server -C "$PWD" LICENSE THIRD_PARTY_LICENSES.md
 
-      - name: Upload macOS Server artifact
+      - name: Build the app
+        run: |
+          VERSION="${TAG#v}"
+          VERSION="${VERSION%%-*}"
+          bash packaging/macos/make-app.sh "$VERSION" universal/telepad app
+
+      # Ad hoc without the Apple credentials; with them: Developer ID, notarized and stapled.
+      - name: Sign the app
+        run: bash packaging/macos/sign-and-notarize.sh app app/Telepad.app
+
+      - name: Make the disk image
+        run: bash packaging/macos/make-dmg.sh "telepad-${TAG}-macos-universal" app/Telepad.app dist
+
+      - name: Check the disk image opens and the app in it runs
+        run: |
+          mkdir -p "$RUNNER_TEMP/dmg"
+          hdiutil attach "dist/telepad-${TAG}-macos-universal.dmg" -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg"
+          ls -la "$RUNNER_TEMP/dmg"
+          codesign --verify --strict --verbose=2 "$RUNNER_TEMP/dmg/Telepad.app"
+          "$RUNNER_TEMP/dmg/Telepad.app/Contents/MacOS/telepad" --version
+          hdiutil detach "$RUNNER_TEMP/dmg"
+
+      - name: Record whether this build is signed and notarized
+        id: signed
+        run: |
+          if [ -n "$APPLE_SIGNING_IDENTITY" ] && [ -n "$APPLE_CERTIFICATE_BASE64" ] && [ -n "$APPLE_API_KEY_BASE64" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload macOS artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: telepad-server-macos
-          path: dist/*.tar.gz
+          name: release-macos
+          path: |
+            dist/*.dmg
+            dist/*.tar.gz
           retention-days: 7
 
   publish-release:
     name: Publish Release Assets
-    needs: [build-android, build-server-windows, build-server-linux, build-server-macos]
+    needs: [build-android, build-desktop-windows, build-desktop-linux, build-desktop-macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
+      # For the build-provenance attestation of every file.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -281,12 +431,14 @@ jobs:
         id: meta
         run: |
           COMMIT_SHA=$(git rev-parse HEAD)
-          echo "commit_sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
 
+      # Only the finished files: the signing steps leave temporary artifacts of their own, which must not be published.
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: release-assets
+          pattern: release-*
           merge-multiple: true
 
       # The same files again under names without the version, so that links such as
@@ -318,9 +470,19 @@ jobs:
           echo "Generated SHA256SUMS:"
           cat SHA256SUMS
 
+      # A signed statement, kept by GitHub, of which workflow run built each file from which commit:
+      #   gh attestation verify <file> --repo <owner>/<repo>
+      - name: Attest where the files were built
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: release-assets/SHA256SUMS
+
       # The release text is the changelog section for this version, followed by GitHub's own list
       # of what changed.
       - name: Write the release notes
+        env:
+          WINDOWS_SIGNED: ${{ needs.build-desktop-windows.outputs.signed }}
+          MACOS_SIGNED: ${{ needs.build-desktop-macos.outputs.signed }}
         run: |
           VERSION="${TAG#v}"
           VERSION="${VERSION%%-*}"
@@ -332,15 +494,47 @@ jobs:
           if [ ! -s release-notes.md ]; then
             echo "::warning::CHANGELOG.md has no section for $VERSION, so the release text is only what GitHub generates."
           fi
-          cat >> release-notes.md <<'EOF'
+          {
+            cat <<'EOF'
 
           ### Which file do I need?
 
-          - **Your phone:** `telepad-android.apk`
-          - **Your PC:** `telepad-server-windows-x86_64.exe` (Windows), `telepad-server-linux-x86_64.tar.gz` (Linux) or `telepad-server-macos-universal.tar.gz` (macOS)
+          | You have | Download |
+          | --- | --- |
+          | An Android phone | `telepad-android.apk` |
+          | A Windows PC | `telepad-windows-x86_64-setup.exe` (installer), or `telepad-windows-x86_64.exe` to run without installing |
+          | A Mac | `telepad-macos-universal.dmg` |
+          | A Linux PC | `telepad-linux-x86_64.tar.gz`, then run `./install.sh` in the unpacked folder |
 
-          Check a download against `SHA256SUMS`. Setup instructions are in the [README](https://github.com/${{ github.repository }}#quick-start).
+          For a PC with no desktop, there is also a console-only server: `telepad-server-windows-x86_64.exe` (or `.zip`), `telepad-server-linux-x86_64.tar.gz` and `telepad-server-macos-universal.tar.gz`.
+
+          Telepad on the PC shows a QR code the first time it starts: scan it with the Telepad app on your phone.
+
+          ### If your system warns you
+
+          - **Android** asks to allow installs from your browser or file manager the first time: allow it for this install.
           EOF
+            if [ "$WINDOWS_SIGNED" != "true" ]; then
+              echo '- **Windows** may say "Windows protected your PC", because this build is not code-signed yet. Choose **More info**, then **Run anyway**.'
+            fi
+            if [ "$MACOS_SIGNED" != "true" ]; then
+              echo '- **macOS** may say it cannot verify Telepad, because this build is not notarized yet. Open **System Settings > Privacy & Security** and choose **Open Anyway**. macOS also asks to let Telepad control the computer (Accessibility): allow it, or the phone cannot type or click.'
+            else
+              echo '- **macOS** asks to let Telepad control the computer (Accessibility): allow it, or the phone cannot type or click.'
+            fi
+            cat <<'EOF'
+
+          ### Check what you downloaded
+
+          Every file is listed in `SHA256SUMS`, and GitHub holds a signed statement of which build produced each one:
+
+          ```
+          gh attestation verify telepad-android.apk --repo ${{ github.repository }}
+          ```
+
+          Setup instructions are in the [README](https://github.com/${{ github.repository }}#quick-start).
+          EOF
+          } >> release-notes.md
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Telepad
+GenericName=Phone as trackpad and keyboard
+Comment=Use your phone as a trackpad and keyboard for this computer
+Exec=telepad
+Icon=telepad
+Terminal=false
+Categories=Utility;
+Keywords=phone;remote;touchpad;trackpad;keyboard;mouse;
+StartupNotify=false

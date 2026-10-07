@@ -132,7 +132,7 @@ else
 fi
 
 # --- Tag, which starts the Release workflow -----------------------------------------------
-say "Ready to tag $tag. The Release workflow builds the app and the servers, signs the APK, and publishes."
+say "Ready to tag $tag. The Release workflow builds the phone app and the desktop apps, signs the APK, and publishes."
 ask "Create the signed tag $tag and push it?"
 run git tag -s "$tag" -m "Telepad $full"
 run git push origin "$tag"
@@ -163,7 +163,9 @@ else
 fi
 check_links() {
   local failed=0 name code
-  for name in telepad-android.apk telepad-server-windows-x86_64.exe telepad-server-windows-x86_64.zip \
+  for name in telepad-android.apk \
+              telepad-windows-x86_64-setup.exe telepad-windows-x86_64.exe telepad-macos-universal.dmg telepad-linux-x86_64.tar.gz \
+              telepad-server-windows-x86_64.exe telepad-server-windows-x86_64.zip \
               telepad-server-linux-x86_64.tar.gz telepad-server-macos-universal.tar.gz SHA256SUMS; do
     code="$(curl -s -o /dev/null -w '%{http_code}' -L "$download_base/$name")"
     printf '    %-42s %s\n' "$name" "$code"
@@ -187,6 +189,12 @@ if [ -n "$apksigner" ] && command -v java > /dev/null; then
   gh release download "$tag" --repo "$repo" --pattern 'telepad-android.apk' --dir "$work"
   new_key="$("$apksigner" verify --print-certs "$work/telepad-android.apk" | sed -nE 's/^Signer #1 certificate SHA-256 digest: //p')"
   echo "    $tag is signed with $new_key"
+  # GitHub's signed statement of which workflow run built the file, which anyone can check the same way.
+  if gh attestation verify "$work/telepad-android.apk" --repo "$repo" > /dev/null 2>&1; then
+    echo "    the APK has a valid build attestation (gh attestation verify telepad-android.apk --repo $repo)"
+  else
+    warn "no valid build attestation was found for the APK (it can take a minute to appear, or gh may be too old)"
+  fi
   old_name=""
   if [ -n "$previous_tag" ]; then
     old_name="$(gh release view "$previous_tag" --repo "$repo" --json assets --jq '[.assets[].name | select(endswith(".apk") and (ascii_downcase | contains("debug") | not))][0] // empty')"
