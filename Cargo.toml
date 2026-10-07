@@ -25,7 +25,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snow = "0.9"
 sha2 = "0.10"
-base64 = "0.22"
+base64 = "0.23"
 subtle = "2.6"
 rand = "0.8"
 clap = { version = "4.5", features = ["derive"] }
