@@ -71,22 +71,22 @@ rewrite("packaging/arch/PKGBUILD", [
     (r"^sha256sums=\(.*\)$", f"sha256sums=('{digest(linux)}')"),
 ])
 rewrite("packaging/scoop/telepad.json", [
-    (r'^(\s*)"version": ".*",$', rf'\1"version": "{version}",'),
-    (r'^(\s*)"url": ".*",$', rf'\1"url": "https://github.com/omsingh02/telepad/releases/download/{tag}/{windows_exe}#/telepad.exe",'),
-    (r'^(\s*)"hash": ".*",$', rf'\1"hash": "{digest(windows_exe)}",'),
+    (r'^(\s*)"version": ".*",$', rf'\g<1>"version": "{version}",'),
+    (r'^(\s*)"url": ".*",$', rf'\g<1>"url": "https://github.com/omsingh02/telepad/releases/download/{tag}/{windows_exe}#/telepad.exe",'),
+    (r'^(\s*)"hash": ".*",$', rf'\g<1>"hash": "{digest(windows_exe)}",'),
 ])
 for name in ("omsingh02.Telepad.yaml", "omsingh02.Telepad.installer.yaml", "omsingh02.Telepad.locale.en-US.yaml"):
     subs = [(r"^PackageVersion: .*$", f"PackageVersion: {version}")]
     if name.endswith(".installer.yaml"):
         subs += [
-            (r"^(\s*InstallerUrl: ).*$", rf"\1https://github.com/omsingh02/telepad/releases/download/{tag}/{windows_setup}"),
-            (r"^(\s*InstallerSha256: ).*$", rf"\1{digest(windows_setup).upper()}"),
+            (r"^(\s*InstallerUrl: ).*$", rf"\g<1>https://github.com/omsingh02/telepad/releases/download/{tag}/{windows_setup}"),
+            (r"^(\s*InstallerSha256: ).*$", rf"\g<1>{digest(windows_setup).upper()}"),
         ]
     if name.endswith(".locale.en-US.yaml"):
         subs += [(r"^ReleaseNotesUrl: .*$", f"ReleaseNotesUrl: https://github.com/omsingh02/telepad/releases/tag/{tag}")]
     rewrite(f"packaging/winget/{name}", subs)
 rewrite("packaging/homebrew/telepad.rb", [
-    (r'^(\s*)version ".*"$', rf'\1version "{version}"'),
-    (r'^(\s*)sha256 ".*"$', rf'\1sha256 "{digest(mac)}"'),
+    (r'^(\s*)version ".*"$', rf'\g<1>version "{version}"'),
+    (r'^(\s*)sha256 ".*"$', rf'\g<1>sha256 "{digest(mac)}"'),
 ])
 PY

@@ -145,8 +145,11 @@ fi
 
 say "Waiting for the Release workflow"
 release_run=""
+# The run for the commit that was tagged, not simply the newest one for the tag's name: a tag that was deleted and made
+# again (after a failed release) still has the old run, which would be mistaken for the new one.
+tagged_commit="$(git rev-parse "$tag^{commit}")"
 for _ in $(seq 1 30); do
-  release_run="$(gh run list --workflow Release --branch "$tag" --json databaseId --jq '.[0].databaseId // empty' 2> /dev/null || true)"
+  release_run="$(gh run list --workflow Release --branch "$tag" --json databaseId,headSha --jq "[.[] | select(.headSha == \"$tagged_commit\")][0].databaseId // empty" 2> /dev/null || true)"
   [ -z "$release_run" ] || break
   sleep 4
 done
