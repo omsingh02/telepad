@@ -19,7 +19,9 @@ done
 # Ubuntu's container images leave out most of /usr/share/doc (all but the copyright files), so this one is asked of
 # the package's own file list rather than of the disk.
 dpkg -L telepad | grep -q '/usr/share/doc/telepad/THIRD_PARTY_LICENSES.md$' || fail "the third-party licenses are not in the package"
-[ "$(ldd /usr/bin/telepad | grep -c 'not found' || true)" = 0 ] || fail "a library the program needs is missing"
+# A missing library is reported as "libfoo.so => not found". (A binary built on a newer system also names weak
+# symbols of newer glibc versions, which ldd mentions as "weak version ... not found": harmless, the program runs.)
+[ "$(ldd /usr/bin/telepad | grep -c '=> not found' || true)" = 0 ] || fail "a library the program needs is missing"
 grep -q uinput /usr/lib/modules-load.d/telepad.conf || fail "the module list does not name uinput"
 grep -q 'TAG+="uaccess"' /usr/lib/udev/rules.d/60-telepad-uinput.rules || fail "the udev rule does not give the person access"
 apt-get install -y -qq desktop-file-utils > /dev/null 2>&1

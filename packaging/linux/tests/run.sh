@@ -26,7 +26,9 @@ try() {  # try <image> <script> <glob of the package>
   # shellcheck disable=SC2086 # the pattern is a glob on purpose
   cp "$packages"/$pattern "$stage"/
   echo "=== $image"
-  if docker run --rm -v "$stage":/pkg:ro -v "$here/$script":/test.sh:ro "$image" sh /test.sh "$version"; then :; else
+  # --mount, not -v: a missing file is an error with --mount, while -v would make a folder in its place.
+  if docker run --rm --mount "type=bind,source=$stage,target=/pkg,readonly" --mount "type=bind,source=$here/$script,target=/test.sh,readonly" \
+      "$image" sh /test.sh "$version"; then :; else
     echo "=== FAILED on $image" >&2
     failed=1
   fi

@@ -21,6 +21,7 @@ version="$3"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../../.." && pwd)"
 command -v docker > /dev/null || { echo "installer.sh: Docker is needed for this" >&2; exit 1; }
+[ -f "$repo/website/install.sh" ] || { echo "installer.sh: $repo/website/install.sh is not there (is it stashed?)" >&2; exit 1; }
 
 site="$(mktemp -d)"
 server=""
@@ -71,7 +72,8 @@ try() {  # try <image> <kind>
   echo "=== $1"
   if docker run --rm --network host \
       -e TELEPAD_API="http://127.0.0.1:$port/repos/x" -e TELEPAD_DOWNLOADS="http://127.0.0.1:$port/download" \
-      -v "$repo/website/install.sh":/installer/install.sh:ro -v "$here/container-installer.sh":/test.sh:ro \
+      --mount "type=bind,source=$repo/website/install.sh,target=/installer/install.sh,readonly" \
+      --mount "type=bind,source=$here/container-installer.sh,target=/test.sh,readonly" \
       "$1" sh /test.sh "$version" "$2"; then :; else
     echo "=== FAILED on $1" >&2
     failed=1
@@ -90,7 +92,7 @@ if [ "$stable" != "$tag" ]; then
   echo "=== which release is picked when there is a stable one"
   picked="$(docker run --rm --network host \
       -e TELEPAD_API="http://127.0.0.1:$port/repos/x" -e TELEPAD_DOWNLOADS="http://127.0.0.1:$port/download" \
-      -v "$repo/website/install.sh":/installer/install.sh:ro debian:12 \
+      --mount "type=bind,source=$repo/website/install.sh,target=/installer/install.sh,readonly" debian:12 \
       sh -c 'apt-get update -qq > /dev/null; apt-get install -y -qq curl ca-certificates > /dev/null 2>&1; sh /installer/install.sh --user 2>&1 | grep -o "Telepad [0-9.]* for Linux" | head -n 1')"
   echo "picked: $picked"
   [ "$picked" = "Telepad $version for Linux" ] || { echo "FAILED: expected the stable release" >&2; failed=1; }
