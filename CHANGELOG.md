@@ -2,7 +2,7 @@
 
 All notable changes are listed here, newest first. The format follows [Keep a Changelog](https://keepachangelog.com), and the project uses [Semantic Versioning](https://semver.org). The Android app, the desktop server and the git tag share one version number.
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-10-07
 
 A new desktop server for Windows, Linux and macOS, and a redesigned Android app.
 
