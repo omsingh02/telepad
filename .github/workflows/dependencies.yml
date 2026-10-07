@@ -1,0 +1,51 @@
+name: Dependencies
+
+# Known vulnerabilities (RustSec), licenses the project cannot ship, and unexpected sources, for the desktop
+# programs' dependencies. Runs when they change, and every week, because an advisory can be published for a
+# dependency that has not changed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'crates/*/Cargo.toml'
+      - 'deny.toml'
+      - 'scripts/check-dependencies.sh'
+      - '.github/workflows/dependencies.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'crates/*/Cargo.toml'
+      - 'deny.toml'
+      - 'scripts/check-dependencies.sh'
+      - '.github/workflows/dependencies.yml'
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: dependencies-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-deny:
+    name: Advisories, licenses and sources
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # A prebuilt binary, checked against its published checksum: compiling it would take longer than the check.
+      - name: Install cargo-deny
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/install-ci-tool.sh EmbarkStudios/cargo-deny 0.20.2 cargo-deny
+
+      - name: Check each platform's dependencies
+        run: scripts/check-dependencies.sh

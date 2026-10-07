@@ -1,0 +1,29 @@
+# Third-party licenses
+
+Telepad itself is released under the [MIT license](LICENSE). The desktop programs (`telepad` and `telepad-server`) are built with the open source libraries below, each under its own license, which asks for its notice to be passed on. Thank you to all of their authors.
+
+This list covers the libraries of every platform's build (Windows, macOS and Linux), so a library may be listed here that the program for your system does not contain. The phone app lists its own libraries under **Settings → About**.
+
+This file is made by `scripts/update-licenses.sh` from `Cargo.lock`; do not edit it by hand.
+
+## The licenses
+
+{{#each overview}}
+- [{{{name}}}](#{{id}}) ({{count}} libraries)
+{{/each}}
+
+{{#each licenses}}
+## {{{name}}}
+
+Used by:
+
+{{#each used_by}}
+- {{crate.name}} {{crate.version}}{{#if crate.repository}} ([{{crate.repository}}]({{crate.repository}})){{/if}}
+{{/each}}
+
+<a id="{{id}}"></a>
+```text
+{{{text}}}
+```
+
+{{/each}}

@@ -1,0 +1,29 @@
+# What `cargo about` needs to write THIRD_PARTY_LICENSES.md (scripts/update-licenses.sh runs it): the licenses of
+# the libraries inside the desktop programs, which ask for their notice to be shipped along with the program.
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    "BSL-1.0",
+    "Unlicense",
+    "MPL-2.0",
+]
+
+# Every platform the program is built for.
+targets = [
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+]
+
+# Telepad's own crates are under the project's own license, which is the file LICENSE.
+private = { ignore = true }
+ignore-build-dependencies = true
+ignore-dev-dependencies = true

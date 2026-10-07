@@ -1,0 +1,44 @@
+# Checks the dependencies of the desktop programs: known vulnerabilities, licenses that the project can ship under
+# its own MIT license, and where crates come from. CI runs it on every change to the dependencies, and weekly, since
+# a new advisory can appear for a dependency that has not changed.
+#
+# Run it once for each platform (scripts/check-dependencies.sh does), because the Cargo.lock holds the dependencies
+# of every platform and each platform's build uses only its own:
+#
+#     cargo deny --target x86_64-pc-windows-msvc check
+#
+# Without --target, the Linux-only and Windows-only parts are judged together, and crates that no build of one
+# platform contains (the GTK crates, which only the Linux build of an unused library would pull in) are reported.
+[advisories]
+yanked = "deny"
+ignore = []
+
+[licenses]
+# Permissive licenses, and MPL-2.0, which asks only that changes to its own files be shared (the two crates under
+# it are used unmodified). Anything else is for a person to decide on, not for a dependency update to slip in.
+unused-allowed-license = "allow"
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    "BSL-1.0",
+    "Unlicense",
+    "MPL-2.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
