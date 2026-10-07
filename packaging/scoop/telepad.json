@@ -4,7 +4,7 @@
     "homepage": "https://telepad-app.vercel.app",
     "license": "MIT",
     "url": "https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.2/telepad-v2.0.0-alpha.2-windows-x86_64.exe#/telepad.exe",
-    "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "hash": "4c035a68360c3bed3f4e84ba9a7c8a216d7eea3a5cebe73e01db4ffda6411e48",
     "bin": "telepad.exe",
     "shortcuts": [
         [

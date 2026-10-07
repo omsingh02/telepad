@@ -11,6 +11,6 @@ UpgradeBehavior: install
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.2/telepad-v2.0.0-alpha.2-windows-x86_64-setup.exe
-    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    InstallerSha256: 2D61B6559762CADDAE1DDF95D4F22E8238A0A92217F2A6C9CE92588B89C62BA2
 ManifestType: installer
 ManifestVersion: 1.6.0

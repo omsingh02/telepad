@@ -19,7 +19,7 @@ optdepends=('gnome-shell-extension-appindicator: the tray icon on GNOME')
 provides=('telepad')
 conflicts=('telepad')
 source=("$pkgname-$pkgver.tar.gz::$url/releases/download/${_tag}/telepad-${_tag}-linux-x86_64.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('a4cc03e0f7c91d7e20db00b2c88b4612c1ab90fbf5440b0310a4effe75a40e38')
 
 package() {
   cd "telepad-${_tag}-linux-x86_64"
