@@ -289,19 +289,58 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      # The same files again under names without the version, so that links such as
+      # .../releases/latest/download/telepad-android.apk keep working from release to release
+      # (the website's download buttons use them).
+      - name: Add version-less copies of each file
+        working-directory: release-assets
+        run: |
+          for f in *; do
+            alias="${f/-${TAG}/}"
+            if [ -f "$f" ] && [ "$alias" != "$f" ]; then
+              cp -- "$f" "$alias"
+            fi
+          done
+          ls -la
+
       - name: Generate Checksums
         working-directory: release-assets
         run: |
           echo "Release assets staged:"
           ls -la
-          rm -f SHA256SUMS
+          # Write to a temporary file first, or the checksum file would list itself.
           for f in *; do
             if [ -f "$f" ]; then
-              sha256sum "$f"
+              sha256sum -- "$f"
             fi
-          done > SHA256SUMS
+          done > "$RUNNER_TEMP/SHA256SUMS"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
           echo "Generated SHA256SUMS:"
           cat SHA256SUMS
+
+      # The release text is the changelog section for this version, followed by GitHub's own list
+      # of what changed.
+      - name: Write the release notes
+        run: |
+          VERSION="${TAG#v}"
+          VERSION="${VERSION%%-*}"
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::warning::CHANGELOG.md has no section for $VERSION, so the release text is only what GitHub generates."
+          fi
+          cat >> release-notes.md <<'EOF'
+
+          ### Which file do I need?
+
+          - **Your phone:** `telepad-android.apk`
+          - **Your PC:** `telepad-server-windows-x86_64.exe` (Windows), `telepad-server-linux-x86_64.tar.gz` (Linux) or `telepad-server-macos-universal.tar.gz` (macOS)
+
+          Check a download against `SHA256SUMS`. Setup instructions are in the [README](https://github.com/${{ github.repository }}#quick-start).
+          EOF
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
@@ -309,5 +348,7 @@ jobs:
           tag_name: ${{ env.TAG }}
           target_commitish: ${{ steps.meta.outputs.commit_sha }}
           name: Telepad ${{ env.TAG }}
+          body_path: release-notes.md
           generate_release_notes: true
+          prerelease: ${{ contains(env.TAG, '-') }}
           files: release-assets/*
