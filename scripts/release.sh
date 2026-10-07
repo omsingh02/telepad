@@ -88,8 +88,17 @@ if [ "$checks" = 1 ]; then
   run cargo clippy --workspace --all-targets --locked -- -D warnings
   run cargo test --workspace --locked
   if [ -n "${ANDROID_HOME:-}${ANDROID_SDK_ROOT:-}" ] || [ -f android/local.properties ]; then
-    say "Checking the Android app"
-    (cd android && run ./gradlew testDebugUnitTest lintDebug)
+    # Gradle 8.10 runs on Java 17 to 23. On a newer default (27, say) it stops with only "What went
+    # wrong: 27", so say what is wrong instead. CI runs the same checks, and this script waits for it.
+    java_major="$("${JAVA_HOME:+$JAVA_HOME/bin/}java" -version 2>&1 | sed -nE '1s/^[^"]*"([0-9]+).*/\1/p' || true)"
+    if [ -z "$java_major" ]; then
+      warn "no Java found (set JAVA_HOME to a JDK 17), so the Android checks are left to CI"
+    elif [ "$java_major" -lt 17 ] || [ "$java_major" -gt 23 ]; then
+      warn "the Android build cannot run on Java $java_major (Gradle 8.10 needs 17 to 23). Set JAVA_HOME to a JDK 17 to check it here; for now the Android checks are left to CI"
+    else
+      say "Checking the Android app"
+      (cd android && run ./gradlew testDebugUnitTest lintDebug)
+    fi
   else
     warn "no Android SDK found (set ANDROID_HOME), so the Android checks are left to CI"
   fi
