@@ -194,4 +194,74 @@ class KeyboardSessionTest {
         keyboard.tapKey(HidKeyCodes.A) // nothing latched, nothing changes
         assertEquals(idle, keyboard.version.value)
     }
+
+    // ── Holding a modifier while another finger taps keys ────────────
+
+    private val meta = InputEvent.Modifiers(leftMeta = true)
+
+    @Test
+    fun `a held modifier applies to every key pressed meanwhile`() {
+        keyboard.holdModifier(ModifierKey.META, nowMs = 0)
+        keyboard.press(HidKeyCodes.NUM_2)
+        keyboard.release(HidKeyCodes.NUM_2)
+        keyboard.press(HidKeyCodes.NUM_3)
+        keyboard.release(HidKeyCodes.NUM_3)
+        keyboard.releaseModifier(ModifierKey.META, nowMs = 900)
+
+        assertEquals(tapOf(HidKeyCodes.NUM_2, meta) + tapOf(HidKeyCodes.NUM_3, meta), sent)
+    }
+
+    @Test
+    fun `after a chord nothing stays on, and the modifier is not armed`() {
+        keyboard.holdModifier(ModifierKey.META, nowMs = 0)
+        keyboard.press(HidKeyCodes.ENTER)
+        keyboard.release(HidKeyCodes.ENTER)
+        keyboard.releaseModifier(ModifierKey.META, nowMs = 200)
+
+        assertFalse(keyboard.hasModifiers)
+        assertEquals(ModifierState.OFF, keyboard.state(ModifierKey.META))
+    }
+
+    @Test
+    fun `a quick tap on a modifier arms it for the next key only`() {
+        keyboard.holdModifier(ModifierKey.CTRL, nowMs = 0)
+        keyboard.releaseModifier(ModifierKey.CTRL, nowMs = 120)
+        assertEquals(ModifierState.ARMED, keyboard.state(ModifierKey.CTRL))
+        assertTrue("tapping a modifier sends nothing by itself", sent.isEmpty())
+
+        keyboard.press(HidKeyCodes.C)
+        keyboard.release(HidKeyCodes.C)
+        assertEquals(tapOf(HidKeyCodes.C, ctrl), sent)
+        assertEquals(ModifierState.OFF, keyboard.state(ModifierKey.CTRL))
+    }
+
+    @Test
+    fun `two quick taps lock a modifier`() {
+        keyboard.holdModifier(ModifierKey.META, nowMs = 0)
+        keyboard.releaseModifier(ModifierKey.META, nowMs = 100)
+        keyboard.holdModifier(ModifierKey.META, nowMs = 200)
+        keyboard.releaseModifier(ModifierKey.META, nowMs = 300)
+
+        assertEquals(ModifierState.LOCKED, keyboard.state(ModifierKey.META))
+    }
+
+    @Test
+    fun `a modifier held on its own is pressed by itself`() {
+        // Super alone is what opens a launcher.
+        keyboard.holdModifier(ModifierKey.META, nowMs = 0)
+        keyboard.releaseModifier(ModifierKey.META, nowMs = KeyboardSession.BARE_PRESS_MS + 50)
+
+        assertEquals(tapOf(HidKeyCodes.LEFT_META, InputEvent.Modifiers.EMPTY), sent)
+        assertFalse(keyboard.hasModifiers)
+    }
+
+    @Test
+    fun `a modifier under a finger looks on, and applies`() {
+        keyboard.holdModifier(ModifierKey.SHIFT, nowMs = 0)
+        assertEquals(ModifierState.ARMED, keyboard.visualState(ModifierKey.SHIFT))
+        assertTrue(keyboard.modifiers().leftShift)
+
+        keyboard.releaseModifier(ModifierKey.SHIFT, nowMs = 10_000)
+        assertFalse(keyboard.modifiers().leftShift)
+    }
 }

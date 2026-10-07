@@ -92,25 +92,30 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
-        // Hold the splash until the saved settings are read, so the first frame already has
-        // the right theme and the right first screen.
+        // Hold the splash until the saved settings are read; the app itself is built after that.
         splash.setKeepOnScreenCondition { !settings.loaded.value }
         enableEdgeToEdge()
 
         setContent {
             val preferences by settings.preferences.collectAsStateWithLifecycle()
+            val loaded by settings.loaded.collectAsStateWithLifecycle()
             TelepadTheme(
                 themeMode = preferences.themeMode,
                 accent = preferences.accentColor,
                 dynamicColor = preferences.dynamicColor,
             ) {
                 CompositionLocalProvider(LocalPlatformActions provides platform) {
-                    TelepadRoot(
-                        settingsViewModel = settings,
-                        devicesViewModel = devices,
-                        remoteViewModel = remote,
-                        startAtOnboarding = !preferences.onboardingShown,
-                    )
+                    // The first screen depends on the saved settings, and it is chosen once, when
+                    // the app is first built. So nothing is built until they are read (the splash
+                    // screen covers the wait); building it earlier opened the walkthrough every time.
+                    if (loaded) {
+                        TelepadRoot(
+                            settingsViewModel = settings,
+                            devicesViewModel = devices,
+                            remoteViewModel = remote,
+                            startAtOnboarding = !preferences.onboardingShown,
+                        )
+                    }
                 }
             }
         }

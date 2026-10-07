@@ -2,19 +2,29 @@ package com.omsingh.telepad.settings
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 
-/** App-wide Preferences DataStore handle. */
+/**
+ * App-wide Preferences DataStore handle. A damaged settings file is replaced by the defaults
+ * rather than crashing the app every time it opens.
+ */
 val Context.settingsDataStore: DataStore<Preferences>
-    by preferencesDataStore(name = "telepad_settings")
+    by preferencesDataStore(
+        name = "telepad_settings",
+        corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+    )
 
 /**
  * Reads and writes the [UserPreferences] backed by Preferences DataStore.
@@ -61,7 +71,9 @@ class SettingsRepository(private val context: Context) {
     }
 
     /** Reactive view. Emits on any write. UI binds to this via `collectAsState`. */
-    val preferences: Flow<UserPreferences> = context.settingsDataStore.data.map(::decode)
+    val preferences: Flow<UserPreferences> = context.settingsDataStore.data
+        .catch { error -> if (error is IOException) emit(emptyPreferences()) else throw error }
+        .map(::decode)
 
     /**
      * Apply [transform] to the current preferences and persist the result.

@@ -105,6 +105,46 @@ class DiscoveryRegistryTest {
     }
 
     @Test
+    fun `an address that never answers is not shown as a second PC`() {
+        // A PC with Tailscale: its announcement reaches the phone stamped with the VPN address,
+        // which the phone cannot reach, so only the Wi-Fi address ever answers with a key.
+        registry.onAnnouncement("100.95.242.28", 5000, "deed", 0)
+        registry.onAnnouncement("192.168.0.108", 5000, "deed", 0)
+        registry.onPublicKey("192.168.0.108", 5000, "DEED-KEY")
+
+        val servers = registry.snapshot(1_000)
+        assertEquals(listOf("192.168.0.108"), servers.map { it.host })
+    }
+
+    @Test
+    fun `the unanswered address is shown again when it is the only one left`() {
+        registry.onAnnouncement("100.95.242.28", 5000, "deed", 0)
+        registry.onAnnouncement("192.168.0.108", 5000, "deed", 0)
+        registry.onPublicKey("192.168.0.108", 5000, "DEED-KEY")
+        registry.onAnnouncement("100.95.242.28", 5000, "deed", 10_000) // keeps being heard; the other goes quiet
+
+        assertEquals(listOf("100.95.242.28"), registry.snapshot(16_000).map { it.host })
+    }
+
+    @Test
+    fun `an unanswered address of a PC with another name is still shown`() {
+        registry.onAnnouncement("192.168.0.108", 5000, "deed", 0)
+        registry.onPublicKey("192.168.0.108", 5000, "DEED-KEY")
+        registry.onAnnouncement("192.168.0.77", 5000, "Living room", 0)
+
+        assertEquals(listOf("deed", "Living room"), registry.snapshot(1_000).map { it.name })
+    }
+
+    @Test
+    fun `names are compared ignoring case`() {
+        registry.onAnnouncement("192.168.0.108", 5000, "Deed", 0)
+        registry.onAnnouncement("100.95.242.28", 5000, "DEED", 0)
+        registry.onPublicKey("192.168.0.108", 5000, "DEED-KEY")
+
+        assertEquals(1, registry.snapshot(1_000).size)
+    }
+
+    @Test
     fun `the list is sorted by name ignoring case, then address`() {
         registry.onAnnouncement("10.0.0.9", 5000, "beta", 0)
         registry.onAnnouncement("10.0.0.8", 5000, "Alpha", 0)

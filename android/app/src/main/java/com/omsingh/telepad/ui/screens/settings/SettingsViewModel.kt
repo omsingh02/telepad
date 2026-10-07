@@ -5,12 +5,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.omsingh.telepad.connection.ConnectionManager
 import com.omsingh.telepad.core.trust.PairedDevice
+import com.omsingh.telepad.settings.PreferencesState
 import com.omsingh.telepad.settings.SettingsRepository
 import com.omsingh.telepad.settings.UserPreferences
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** What the settings screens can change. */
@@ -39,12 +37,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val repository = SettingsRepository(application)
     private val manager = ConnectionManager.getInstance(application)
 
-    val preferences: StateFlow<UserPreferences> =
-        repository.preferences.stateIn(viewModelScope, SharingStarted.Eagerly, UserPreferences())
+    private val state = PreferencesState(viewModelScope, repository.preferences)
+
+    val preferences: StateFlow<UserPreferences> = state.preferences
 
     /** False until the saved settings have been read, so the app does not flash the wrong theme or screen. */
-    val loaded: StateFlow<Boolean> =
-        repository.preferences.map { true }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val loaded: StateFlow<Boolean> = state.loaded
 
     val pairedDevices: StateFlow<List<PairedDevice>> = manager.pairedDevices
 

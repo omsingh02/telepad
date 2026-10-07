@@ -37,6 +37,12 @@ class KeyboardSession(private val send: (InputEvent) -> Unit) {
     private val states = mutableMapOf<ModifierKey, ModifierState>()
     private val armedAt = mutableMapOf<ModifierKey, Long>()
 
+    // Modifiers a finger is holding right now (a second finger taps the keys), when they went
+    // down, and which of them a key has been pressed under.
+    private val held = mutableSetOf<ModifierKey>()
+    private val heldAt = mutableMapOf<ModifierKey, Long>()
+    private val usedWhileHeld = mutableSetOf<ModifierKey>()
+
     private val _version = MutableStateFlow(0)
 
     /** Changes whenever a modifier's state does, so a screen showing them knows to redraw. */
@@ -63,12 +69,51 @@ class KeyboardSession(private val send: (InputEvent) -> Unit) {
         changed()
     }
 
+    /**
+     * A finger went down on a modifier key. The modifier applies to every key pressed until
+     * the finger lifts, like holding the key on a real keyboard.
+     */
+    fun holdModifier(key: ModifierKey, nowMs: Long) {
+        held += key
+        heldAt[key] = nowMs
+        usedWhileHeld -= key
+        changed()
+    }
+
+    /**
+     * The finger lifted. If a key was pressed meanwhile, that was the chord and nothing more
+     * happens. Held alone for a moment, the key is pressed by itself (Super on its own opens a
+     * launcher). A quick tap latches it as before: for the next key, locked, or off.
+     */
+    fun releaseModifier(key: ModifierKey, nowMs: Long) {
+        if (!held.remove(key)) return
+        val heldFor = nowMs - (heldAt.remove(key) ?: nowMs)
+        val chord = usedWhileHeld.remove(key)
+        when {
+            chord -> Unit
+            heldFor >= BARE_PRESS_MS -> tap(usageOf(key), InputEvent.Modifiers())
+            else -> tapModifier(key, nowMs)
+        }
+        changed()
+    }
+
+    /** How a modifier key should look: a held one counts as on. */
+    fun visualState(key: ModifierKey): ModifierState =
+        if (key in held && state(key) == ModifierState.OFF) ModifierState.ARMED else state(key)
+
+    private fun usageOf(key: ModifierKey): Int = when (key) {
+        ModifierKey.CTRL -> HidKeyCodes.LEFT_CTRL
+        ModifierKey.ALT -> HidKeyCodes.LEFT_ALT
+        ModifierKey.SHIFT -> HidKeyCodes.LEFT_SHIFT
+        ModifierKey.META -> HidKeyCodes.LEFT_META
+    }
+
     /** The modifiers that apply right now. */
     fun modifiers(): InputEvent.Modifiers = InputEvent.Modifiers(
-        leftCtrl = state(ModifierKey.CTRL) != ModifierState.OFF,
-        leftAlt = state(ModifierKey.ALT) != ModifierState.OFF,
-        leftShift = state(ModifierKey.SHIFT) != ModifierState.OFF,
-        leftMeta = state(ModifierKey.META) != ModifierState.OFF,
+        leftCtrl = state(ModifierKey.CTRL) != ModifierState.OFF || ModifierKey.CTRL in held,
+        leftAlt = state(ModifierKey.ALT) != ModifierState.OFF || ModifierKey.ALT in held,
+        leftShift = state(ModifierKey.SHIFT) != ModifierState.OFF || ModifierKey.SHIFT in held,
+        leftMeta = state(ModifierKey.META) != ModifierState.OFF || ModifierKey.META in held,
     )
 
     /** Whether any modifier is latched. */
@@ -78,6 +123,9 @@ class KeyboardSession(private val send: (InputEvent) -> Unit) {
     fun releaseModifiers() {
         states.clear()
         armedAt.clear()
+        held.clear()
+        heldAt.clear()
+        usedWhileHeld.clear()
         changed()
     }
 
@@ -117,6 +165,7 @@ class KeyboardSession(private val send: (InputEvent) -> Unit) {
 
     /** A key going down and staying down (it repeats on the PC), until [release]. */
     fun press(usage: Int) {
+        usedWhileHeld += held
         send(InputEvent.KeyPress(usage, modifiers()))
     }
 
@@ -139,6 +188,7 @@ class KeyboardSession(private val send: (InputEvent) -> Unit) {
     }
 
     private fun tap(usage: Int, mods: InputEvent.Modifiers) {
+        usedWhileHeld += held
         send(InputEvent.KeyPress(usage, mods))
         send(InputEvent.KeyRelease(usage, mods))
     }
@@ -159,5 +209,8 @@ class KeyboardSession(private val send: (InputEvent) -> Unit) {
     companion object {
         /** Two taps this close together lock a modifier. */
         const val DOUBLE_TAP_MS = 350L
+
+        /** A modifier held this long with no other key is pressed on its own. */
+        const val BARE_PRESS_MS = 450L
     }
 }

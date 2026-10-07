@@ -112,8 +112,6 @@ fun KeyboardTab(
     modifier: Modifier = Modifier,
 ) {
     val host = state.host
-    val version by keyboard.version.collectAsState()
-    var moreKeys by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -125,6 +123,12 @@ fun KeyboardTab(
             PcClipboardCard(text, onCopy = actions::copyPcClipboardToPhone, onDismiss = actions::dismissPcClipboard)
         }
 
+        // The keyboard comes first: shortcuts and keybinds are what it is for. The text field
+        // below it opens the phone's own keyboard only when it is touched.
+        SectionHeader(stringResource(R.string.keys_section_keys), horizontalPadding = 0.dp)
+        KeyGrid(host, keyboard, haptics)
+
+        SectionHeader(stringResource(R.string.keys_section_text), horizontalPadding = 0.dp)
         TypingField(keyboard)
 
         if (!state.overWifi) {
@@ -134,12 +138,6 @@ fun KeyboardTab(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-
-        SectionHeader(stringResource(R.string.keys_section_keys), horizontalPadding = 0.dp)
-        // Passing the version makes the modifier keys redraw when their state changes.
-        ModifierRow(host, keyboard, haptics, version, functionRow = moreKeys, onToggleFunctionRow = { moreKeys = !moreKeys })
-        NavigationRow(keyboard, haptics)
-        if (moreKeys) FunctionRow(keyboard, haptics)
 
         SectionHeader(stringResource(R.string.keys_section_shortcuts), horizontalPadding = 0.dp)
         FlowRow(
@@ -167,8 +165,6 @@ private fun TypingField(keyboard: KeyboardSession) {
     var hidden by rememberSaveable { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     val description = stringResource(R.string.keys_field_description)
-
-    LaunchedEffect(Unit) { focus.requestFocus() }
 
     Surface(
         shape = MaterialTheme.shapes.large,
@@ -238,122 +234,6 @@ private fun TypingField(keyboard: KeyboardSession) {
             }
         }
     }
-}
-
-// ── Keys ─────────────────────────────────────────────────────────────
-
-@Composable
-private fun ModifierRow(
-    host: HostProfile,
-    keyboard: KeyboardSession,
-    haptics: Haptics,
-    @Suppress("UNUSED_PARAMETER") version: Int,
-    functionRow: Boolean,
-    onToggleFunctionRow: () -> Unit,
-) {
-    Row(
-        Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        PlainKey(stringResource(R.string.key_esc), HidKeyCodes.ESC, keyboard, haptics)
-        PlainKey(stringResource(R.string.key_tab), HidKeyCodes.TAB, keyboard, haptics)
-        LatchKey(ModifierKey.CTRL, host.ctrl.symbol, host.ctrl.spokenName, keyboard, haptics)
-        LatchKey(ModifierKey.ALT, host.alt.symbol, host.alt.spokenName, keyboard, haptics)
-        LatchKey(ModifierKey.SHIFT, host.shift.symbol, host.shift.spokenName, keyboard, haptics)
-        LatchKey(ModifierKey.META, host.meta.symbol, host.meta.spokenName, keyboard, haptics)
-        // Shows or hides the row of function keys.
-        ModifierKeyCap(
-            symbol = "Fn",
-            spokenName = stringResource(R.string.keys_function_row),
-            state = if (functionRow) ModifierState.ARMED else ModifierState.OFF,
-            stateDescription = stringResource(R.string.keys_function_row),
-            onTap = onToggleFunctionRow,
-            haptics = haptics,
-        )
-    }
-}
-
-@Composable
-private fun LatchKey(key: ModifierKey, symbol: String, spokenName: String, keyboard: KeyboardSession, haptics: Haptics) {
-    val state = keyboard.state(key)
-    val stateText = when (state) {
-        ModifierState.OFF -> stringResource(R.string.keys_modifier_off, spokenName)
-        ModifierState.ARMED -> stringResource(R.string.keys_modifier_armed, spokenName)
-        ModifierState.LOCKED -> stringResource(R.string.keys_modifier_locked, spokenName)
-    }
-    ModifierKeyCap(
-        symbol = symbol,
-        spokenName = spokenName,
-        state = state,
-        stateDescription = stateText,
-        onTap = { keyboard.tapModifier(key, SystemClock.uptimeMillis()) },
-        haptics = haptics,
-    )
-}
-
-@Composable
-private fun NavigationRow(keyboard: KeyboardSession, haptics: Haptics) {
-    Row(
-        Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        HeldKey(HidKeyCodes.LEFT, keyboard, haptics, icon = Icons.AutoMirrored.Rounded.ArrowBack, description = stringResource(R.string.key_left))
-        HeldKey(HidKeyCodes.DOWN, keyboard, haptics, icon = Icons.Rounded.ArrowDownward, description = stringResource(R.string.key_down))
-        HeldKey(HidKeyCodes.UP, keyboard, haptics, icon = Icons.Rounded.ArrowUpward, description = stringResource(R.string.key_up))
-        HeldKey(HidKeyCodes.RIGHT, keyboard, haptics, icon = Icons.AutoMirrored.Rounded.ArrowForward, description = stringResource(R.string.key_right))
-        HeldKey(HidKeyCodes.HOME, keyboard, haptics, label = stringResource(R.string.key_home))
-        HeldKey(HidKeyCodes.END, keyboard, haptics, label = stringResource(R.string.key_end))
-        HeldKey(HidKeyCodes.PAGE_UP, keyboard, haptics, label = stringResource(R.string.key_page_up))
-        HeldKey(HidKeyCodes.PAGE_DOWN, keyboard, haptics, label = stringResource(R.string.key_page_down))
-        HeldKey(HidKeyCodes.DELETE, keyboard, haptics, label = stringResource(R.string.key_delete))
-        HeldKey(HidKeyCodes.ENTER, keyboard, haptics, label = stringResource(R.string.key_enter))
-    }
-}
-
-@Composable
-private fun FunctionRow(keyboard: KeyboardSession, haptics: Haptics) {
-    Row(
-        Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        for (n in 1..12) {
-            PlainKey("F$n", HidKeyCodes.F1 + n - 1, keyboard, haptics)
-        }
-    }
-}
-
-/** A key that is tapped: down and up at once, however briefly it is touched. */
-@Composable
-private fun PlainKey(label: String, usage: Int, keyboard: KeyboardSession, haptics: Haptics) {
-    KeyCap(
-        label = label,
-        onDown = {},
-        onUp = { keyboard.tapKey(usage) },
-        haptics = haptics,
-    )
-}
-
-/** A key that stays down while it is touched, so the PC repeats it. */
-@Composable
-private fun HeldKey(
-    usage: Int,
-    keyboard: KeyboardSession,
-    haptics: Haptics,
-    label: String? = null,
-    icon: ImageVector? = null,
-    description: String = label.orEmpty(),
-) {
-    KeyCap(
-        label = label,
-        icon = icon,
-        description = description,
-        onDown = { keyboard.press(usage) },
-        onUp = { keyboard.release(usage) },
-        haptics = haptics,
-    )
 }
 
 // ── Shortcuts and clipboard ──────────────────────────────────────────

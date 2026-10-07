@@ -18,6 +18,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -223,11 +224,27 @@ class ScreenshotTest {
 
     @Test fun remote_keys_dark() = shot("remote-keys-dark", dark = true, interact = openTab("Keys"), content = remote(Fixtures.remote()))
 
+    /** Super is on for the next key and Shift is locked: both must look on. */
+    @Test fun remote_keys_chord() = shot(
+        "remote-keys-chord",
+        dark = true,
+        interact = {
+            openTab("Keys")()
+            compose.mainClock.advanceTimeBy(800) // the tab's content arrives with a short animation
+            compose.onNodeWithContentDescription("Super").performClick()
+            compose.onNodeWithContentDescription("Shift").performClick()
+            compose.onNodeWithContentDescription("Shift").performClick()
+            compose.mainClock.advanceTimeBy(400)
+        },
+        content = remote(Fixtures.remote(os = HostOs.LINUX)),
+    )
+
     @Test fun remote_keys_mac() = shot("remote-keys-mac", interact = openTab("Keys"), content = remote(Fixtures.remote(os = HostOs.MACOS)))
 
-    @Test fun remote_media() = shot("remote-media", interact = openTab("Media"), content = remote(Fixtures.remote()))
+    // The media pictures show what the desktop server offers today, which has no Now Playing card.
+    @Test fun remote_media() = shot("remote-media", interact = openTab("Media"), content = remote(Fixtures.remote(nowPlaying = false)))
 
-    @Test fun remote_media_dark() = shot("remote-media-dark", dark = true, interact = openTab("Media"), content = remote(Fixtures.remote()))
+    @Test fun remote_media_dark() = shot("remote-media-dark", dark = true, interact = openTab("Media"), content = remote(Fixtures.remote(nowPlaying = false)))
 
     @Test fun remote_media_bluetooth_mac() = shot(
         "remote-media-bluetooth-mac",

@@ -208,7 +208,8 @@ class RemoteScreenTest {
         show(Fixtures.remote())
         openTab(R.string.remote_mode_keys)
         compose.onNodeWithText(string(R.string.keys_paste_phone)).assertExists()
-        compose.onNodeWithText(string(R.string.keys_paste_phone)).performClick()
+        // Below the keyboard, off the first screenful: use the node's own click action.
+        compose.activate(compose.onNodeWithText(string(R.string.keys_paste_phone)))
         assertEquals(1, pasted)
     }
 

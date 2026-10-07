@@ -22,6 +22,11 @@ data class DiscoveredServer(
  * twice. Once its public key is known, announcements with the same key are one
  * entry, represented by the address heard most recently.
  *
+ * Some of those addresses cannot be reached from here at all (a VPN's or a Docker
+ * network's, heard because the PC's network stack sent the announcement through the
+ * Wi-Fi), so their key is never answered. While a PC of the same name is listed with
+ * a key, such an address is not shown as another PC.
+ *
  * Time is passed in. Not thread-safe: confine to one thread or guard externally.
  */
 class DiscoveryRegistry(private val ttlMs: Long = 15_000L) {
@@ -68,7 +73,9 @@ class DiscoveryRegistry(private val ttlMs: Long = 15_000L) {
                 if (current == null || server.lastSeenMs > current.lastSeenMs) newestPerKey[key] = server
             }
         }
-        return (newestPerKey.values + unkeyed)
+        val namesWithKey = newestPerKey.values.mapTo(HashSet()) { it.name.lowercase() }
+        val unanswered = unkeyed.filter { it.name.lowercase() !in namesWithKey }
+        return (newestPerKey.values + unanswered)
             .sortedWith(compareBy({ it.name.lowercase() }, { it.host }))
     }
 

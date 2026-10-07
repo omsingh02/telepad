@@ -165,11 +165,14 @@
     <!-- Keyboard -->
     <string name="keys_placeholder">Type here. It is sent as you type.</string>
     <string name="keys_clear">Clear</string>
+    <string name="keys_chord_hint">Hold a modifier while you tap keys. Tap it once for the next key, twice to lock it, or hold it alone to press it by itself.</string>
+    <string name="keys_chord_active">%1$s + …</string>
     <string name="keys_hide_text">Hide what I type</string>
     <string name="keys_show_text">Show what I type</string>
     <string name="keys_function_row">Function keys F1 to F12</string>
     <string name="keys_field_description">Text sent to the PC as you type</string>
     <string name="keys_section_keys">Keys</string>
+    <string name="keys_section_text">Type text</string>
     <string name="keys_section_shortcuts">Shortcuts</string>
     <string name="keys_modifier_armed">%1$s, on for the next key</string>
     <string name="keys_modifier_locked">%1$s, locked on</string>
