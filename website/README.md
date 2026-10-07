@@ -8,7 +8,7 @@ index.html            the page
 assets/site.css       all the styling (dark by default, light with prefers-color-scheme)
 assets/site.js        scroll reveal, the screenshot strip's buttons, the "recommended for you" download
 assets/fonts/         Cal Sans and Inter, subset to Latin (OFL.txt has their license)
-assets/img/           logo, icons, social image, and screens/ (made from the app's screenshots)
+assets/img/           logo, icons, social image, and screens/ (made from the app's screenshots and from a picture of the PC's page, `docs/brand/pc-page.sh`)
 vercel.json           security headers (CSP and friends) and caching
 tools/                preview server, image builder, URL changer
 ```
@@ -23,7 +23,7 @@ docs/brand/export.sh                     # rebuild the icons and the social imag
 
 `serve.py` sends the production Content Security Policy, so an inline style or a script from another site shows up in the browser's console while you work, not after a deploy. Nothing else needs installing.
 
-Keep the copy honest: say only what the app and the server do today. Download buttons point at `releases/latest/download/<name>`, and the release workflow publishes those version-less names (`telepad-android.apk`, `telepad-server-windows-x86_64.exe`, `telepad-server-linux-x86_64.tar.gz`, `telepad-server-macos-universal.tar.gz`).
+Keep the copy honest: say only what the app and the server do today. Download buttons point at `releases/latest/download/<name>`, and the release workflow publishes those version-less names (`telepad-android.apk`, `telepad-windows-x86_64-setup.exe`, `telepad-windows-x86_64.exe`, `telepad-macos-universal.dmg`, `telepad-linux-x86_64.tar.gz`, and the console servers `telepad-server-*`).
 
 ## Deploying
 

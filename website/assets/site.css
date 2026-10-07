@@ -252,6 +252,7 @@ h2 { margin-top: 12px; font-size: clamp(2rem, 4.2vw, 3.1rem); line-height: 1.1; 
   box-shadow: 0 0 0 1px var(--line), 0 24px 50px -24px rgba(0, 0, 0, 0.55);
 }
 .step-shot.from-bottom img { object-position: 50% 100%; }
+.step-shot.from-middle img { object-position: 50% 50%; }
 .step-n {
   display: grid; place-items: center; width: 30px; height: 30px; margin: 0 6px 14px;
   border-radius: 50%; background: var(--btn); color: var(--btn-ink);

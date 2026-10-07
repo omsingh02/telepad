@@ -147,22 +147,26 @@
 
         <ol class="steps">
           <li class="step reveal">
-            <div class="step-art">
-              <div class="terminal" role="img" aria-label="Terminal output of the Telepad desktop app, showing its port, hostname and a fingerprint.">
-                <div class="terminal-bar"><span></span><span></span><span></span></div>
-<pre><b>$ ./telepad-server</b>
- Telepad Desktop Server v2.0.0
- Port:        5000
- Hostname:    DESKTOP-PC
- Fingerprint: <em>7F2A · B9C1 · 4E08</em>
-              <em>91D3 · 0AC7</em>
- Input:       Windows SendInput
- Pairing:     OPEN for 299 s</pre>
-              </div>
+            <div class="step-art step-shot">
+              <picture>
+                <source srcset="assets/img/screens/pc-page.avif" type="image/avif">
+                <img src="assets/img/screens/pc-page.webp" width="640" height="1120" alt="Telepad’s page on the PC: the title Pair a phone, a QR code and the steps to scan it." loading="lazy" decoding="async">
+              </picture>
             </div>
             <span class="step-n">1</span>
-            <h3>Start Telepad on your PC</h3>
-            <p>Download one small file and run it. There is no installer and nothing else to set up. It prints a short code that identifies your PC.</p>
+            <h3>Install Telepad on your PC</h3>
+            <p>Run the installer (or open the app on a Mac). Telepad sits in your tray and shows a QR code. It can start with your computer, so it is always there.</p>
+          </li>
+          <li class="step reveal">
+            <div class="step-art step-shot from-middle">
+              <picture>
+                <source srcset="assets/img/screens/scan-qr.avif" type="image/avif">
+                <img src="assets/img/screens/scan-qr.webp" width="640" height="1300" alt="The phone’s scanner with the PC’s QR code inside the frame." loading="lazy" decoding="async">
+              </picture>
+            </div>
+            <span class="step-n">2</span>
+            <h3>Scan the code with your phone</h3>
+            <p>Open the app and tap <b>Scan QR code</b>. The code holds your PC’s key, so there is nothing to type and nothing to compare.</p>
           </li>
           <li class="step reveal">
             <div class="step-art step-shot">
@@ -171,20 +175,9 @@
                 <img src="assets/img/screens/devices-connected.webp" width="640" height="1300" alt="The Devices screen listing Desk PC, a MacBook and a nearby PC with a Pair button." loading="lazy" decoding="async">
               </picture>
             </div>
-            <span class="step-n">2</span>
-            <h3>Open the app, pick your PC</h3>
-            <p>Telepad finds computers on your Wi‑Fi by itself. Tap yours, then tap <b>Pair</b>.</p>
-          </li>
-          <li class="step reveal">
-            <div class="step-art step-shot from-bottom">
-              <picture>
-                <source srcset="assets/img/screens/pairing-verify.avif" type="image/avif">
-                <img src="assets/img/screens/pairing-verify.webp" width="640" height="1300" alt="The Verify this PC sheet: a short code to compare with the one on the PC, and a They match button." loading="lazy" decoding="async">
-              </picture>
-            </div>
             <span class="step-n">3</span>
-            <h3>Check the code, once</h3>
-            <p>If the code on your phone matches the one on your PC, tap <b>They match</b>. You’re paired, and from then on it just connects.</p>
+            <h3>That’s it</h3>
+            <p>You are paired, and from then on the phone just connects. No account, no password, nothing leaves your network.</p>
           </li>
         </ol>
       </div>
@@ -360,11 +353,11 @@
               </li>
               <li>
                 <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-key"/></svg>
-                <div><h3>You verify your PC, once</h3><p>The phone and the PC both show an 80-bit fingerprint of the PC’s key. If they match, you are talking to your PC. If a PC ever answers with a different key, the app warns you instead of connecting.</p></div>
+                <div><h3>Scanning proves it is your PC</h3><p>The QR code on your PC’s screen carries the PC’s key, so a fake PC cannot take its place. (Without a camera, compare the 80-bit fingerprint on both screens instead.) If a PC ever answers with a different key, the app warns you instead of connecting.</p></div>
               </li>
               <li>
                 <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-shield"/></svg>
-                <div><h3>Your PC decides who can pair</h3><p>A phone can control the PC only after you open a short pairing window on it. The window closes by itself as soon as one phone has paired.</p></div>
+                <div><h3>Your PC decides who can pair</h3><p>A phone can control the PC only after it scans a code your PC shows. The code works for one phone, once, for five minutes.</p></div>
               </li>
               <li>
                 <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-cloud-off"/></svg>
@@ -407,34 +400,34 @@
             <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-phone"/></svg></span>
             <h3>Android app</h3>
             <p class="dl-meta">Android 9 or later · APK</p>
-            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.1/telepad-android.apk"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download APK</a>
+            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.2/telepad-android.apk"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download APK</a>
             <p class="dl-note">Allow installs from your browser when Android asks.</p>
           </article>
           <article class="dl reveal" data-os="windows">
             <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-monitor"/></svg></span>
             <h3>Windows</h3>
-            <p class="dl-meta">Windows 10 and 11 · 64-bit · one .exe</p>
-            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.1/telepad-server-windows-x86_64.exe"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download .exe</a>
-            <p class="dl-note">Allow UDP port 5000 in the firewall if asked.</p>
+            <p class="dl-meta">Windows 10 and 11 · 64-bit · installer</p>
+            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.2/telepad-windows-x86_64-setup.exe"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download installer</a>
+            <p class="dl-note">Windows may say it does not know the app yet: <b>More info</b>, then <b>Run anyway</b>. Or <a href="https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.2/telepad-windows-x86_64.exe">run it without installing</a>.</p>
           </article>
           <article class="dl reveal" data-os="linux">
             <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-terminal"/></svg></span>
             <h3>Linux</h3>
             <p class="dl-meta">x86_64 · glibc 2.35+ · .tar.gz</p>
-            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.1/telepad-server-linux-x86_64.tar.gz"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download .tar.gz</a>
-            <p class="dl-note">Needs access to <code>/dev/uinput</code>. <a href="https://github.com/omsingh02/telepad#linux">One-time setup</a>.</p>
+            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.2/telepad-linux-x86_64.tar.gz"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download .tar.gz</a>
+            <p class="dl-note">Unpack it and run <code>./install.sh</code>. Needs access to <code>/dev/uinput</code>: <a href="https://github.com/omsingh02/telepad#linux">one-time setup</a>.</p>
           </article>
           <article class="dl reveal" data-os="macos">
             <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-laptop"/></svg></span>
             <h3>macOS</h3>
-            <p class="dl-meta">Apple silicon and Intel · .tar.gz</p>
-            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.1/telepad-server-macos-universal.tar.gz"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download .tar.gz</a>
-            <p class="dl-note">Not notarized yet. <a href="https://github.com/omsingh02/telepad#macos">How to open it</a>.</p>
+            <p class="dl-meta">macOS 11+ · Apple silicon and Intel · .dmg</p>
+            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.2/telepad-macos-universal.dmg"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download .dmg</a>
+            <p class="dl-note">Not notarized yet, so macOS asks once. <a href="https://github.com/omsingh02/telepad#macos">How to open it</a>.</p>
           </article>
         </div>
 
         <p class="dl-foot reveal">
-          Every file is listed with its SHA-256 in <a href="https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.1/SHA256SUMS">SHA256SUMS</a>.
+          Every file is listed with its SHA-256 in <a href="https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.2/SHA256SUMS">SHA256SUMS</a>, and GitHub can prove which build made it (<a href="https://github.com/omsingh02/telepad#checking-a-download">how to check</a>). A server for PCs without a desktop is on the <a href="https://github.com/omsingh02/telepad/releases">releases page</a>.
           Prefer to build it yourself? <a href="https://github.com/omsingh02/telepad#building-from-source">Build from source</a> or see <a href="https://github.com/omsingh02/telepad/releases">all releases</a>.
         </p>
       </div>
@@ -471,7 +464,7 @@
         <div class="faq reveal">
           <details>
             <summary>Do I need to install something on my PC? <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-chevron"/></svg></summary>
-            <p>For Wi‑Fi mode, yes: Telepad for your computer, a single small file with no installer and no dependencies. Bluetooth mode needs nothing on the PC. Your phone shows up as a Bluetooth keyboard and mouse.</p>
+            <p>For Wi‑Fi mode, yes: Telepad for your computer, a small app that sits in the tray (the menu bar on a Mac) and can start with your computer. Bluetooth mode needs nothing on the PC: your phone shows up as a Bluetooth keyboard and mouse.</p>
           </details>
           <details>
             <summary>Does it work away from home? <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-chevron"/></svg></summary>
@@ -495,7 +488,7 @@
           </details>
           <details>
             <summary>Is it on Google Play or F-Droid? <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-chevron"/></svg></summary>
-            <p>Not yet. Download the signed APK from the GitHub releases. Every file is listed with its checksum.</p>
+            <p>Not yet. Download the signed APK from the GitHub releases. Every file is listed with its checksum, and has a build attestation that shows it was built from this repository.</p>
           </details>
           <details>
             <summary>How can I help? <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-chevron"/></svg></summary>
@@ -533,13 +526,16 @@
         <a href="https://github.com/omsingh02/telepad/releases">Releases</a>
         <a href="https://github.com/omsingh02/telepad/blob/main/CHANGELOG.md">Changelog</a>
         <a href="https://github.com/omsingh02/telepad/blob/main/CONTRIBUTING.md">Contributing</a>
+        <a href="https://github.com/omsingh02/telepad/discussions">Discussions</a>
       </nav>
       <nav class="foot-links" aria-label="Help">
         <h2>Help</h2>
         <a href="https://github.com/omsingh02/telepad#troubleshooting">Troubleshooting</a>
         <a href="https://github.com/omsingh02/telepad/issues/new/choose">Report a problem</a>
         <a href="https://github.com/omsingh02/telepad/blob/main/SECURITY.md">Security policy</a>
+        <a href="https://github.com/omsingh02/telepad/blob/main/PRIVACY.md">Privacy</a>
         <a href="https://github.com/omsingh02/telepad/blob/main/LICENSE">MIT license</a>
+        <a href="https://github.com/omsingh02/telepad/blob/main/THIRD_PARTY_LICENSES.md">Third-party licenses</a>
       </nav>
     </div>
     <div class="wrap foot-legal">
