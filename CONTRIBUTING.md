@@ -2,7 +2,9 @@
 
 Thank you for wanting to help. Bug reports, ideas, documentation fixes and patches are all welcome.
 
-- **Found a bug or have an idea?** Open an [issue](https://github.com/omsingh02/telepad/issues). For a bug, say what you did, what you expected, what happened, and your phone, PC operating system and Telepad versions (the app's *Settings → About*, and `telepad-server --version`).
+- **Found a bug or have an idea?** Open an [issue](https://github.com/omsingh02/telepad/issues/new/choose). For a bug, say what you did, what you expected, what happened, and your phone, PC operating system and Telepad versions (the app's *Settings → About*, and the PC page's footer or `telepad --version`), and attach the desktop app's log if you can (the README says where it is).
+- **Have a question?** Ask in [Discussions](https://github.com/omsingh02/telepad/discussions).
+- Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 - **Found a security problem?** Please do not open a public issue. See [SECURITY.md](SECURITY.md).
 - **Want to change something big?** Open an issue first so we can agree on the direction before you spend a weekend on it.
 
@@ -13,7 +15,9 @@ Thank you for wanting to help. Bug reports, ideas, documentation fixes and patch
 | `crates/telepad-protocol` | The wire protocol: message types and their encoding. No I/O. |
 | `crates/telepad-crypto` | The Noise IK handshake, the replay window, key storage, fingerprints. |
 | `crates/telepad-platform` | The operating-system layer: Windows `SendInput`, Linux `uinput`, macOS CoreGraphics, clipboard, network interfaces, config paths. |
-| `crates/telepad-server` | The desktop server: discovery, pairing policy, sessions, console. |
+| `crates/telepad-server` | The desktop server: discovery, pairing policy, invitations (QR codes), sessions, console. |
+| `crates/telepad-tray` | The `telepad` app: tray icon, the page with the QR code, start at login, one copy at a time, the log file. |
+| `packaging/` | The Windows installer, the macOS app and disk image, the Linux tarball, icons, and the package-manager manifests. See [packaging/README.md](packaging/README.md). |
 | `android/` | The Android app (Kotlin, Jetpack Compose). See the structure in the [README](README.md#android-app-structure). |
 
 The protocol is implemented twice, in Rust and in Kotlin. A change to it has to land in both halves, together, and in the protocol list in the README.
@@ -30,7 +34,18 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 ```
 
-CI runs the tests and clippy on Windows, Linux and macOS, and checks formatting. A warning is a failure.
+CI runs the tests and clippy on Windows, Linux and macOS, checks formatting, and builds and tries the installers and packages. A warning is a failure.
+
+When you add or update a dependency, also run:
+
+```bash
+scripts/check-dependencies.sh      # known vulnerabilities, licenses we can ship, sources (needs cargo-deny)
+scripts/update-licenses.sh         # rewrites THIRD_PARTY_LICENSES.md from Cargo.lock (needs cargo-about); commit the result
+```
+
+The release stops if `THIRD_PARTY_LICENSES.md` is out of date, because the desktop programs ship with it. A license that `deny.toml` does not list is for a person to decide on: say in the pull request why it is fine.
+
+The desktop app writes a log file (see the README) that must never contain what a person typed or copied: log the *kind* of a message, never its content.
 
 To try the server without letting it move your real mouse, run it without input injection and with a scratch key directory:
 
@@ -126,4 +141,4 @@ scripts/release.sh 2.1.0        # checks, pushes main, waits for CI, tags, waits
 
 `release.sh` asks before each step that cannot be undone (`--dry-run` shows what it would do). The changelog section for the version must be headed `## [2.1.0] - 2026-10-31` (version and date): the release workflow publishes it as the release notes, and the script dates it for you if it still says `Unreleased`.
 
-The workflow builds the signed APK and the Windows, Linux and macOS servers, and publishes them, each under a name with the version and a name without it (the website's download buttons use the latter), with a `SHA256SUMS` file. After it finishes, `release.sh` checks that every download link works and that the APK is signed with the same key as the previous release: a different key would stop phones from updating in place. The workflow needs the signing keystore in the repository's secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, and optionally `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`).
+The workflow builds the signed APK, the Windows installer, the macOS disk image, the Linux tarball and the console servers, and publishes them, each under a name with the version and a name without it (the website's download buttons use the latter), with a `SHA256SUMS` file and a build attestation for every file (see [docs/code-signing.md](docs/code-signing.md)). After it finishes, `release.sh` checks that every download link works and that the APK is signed with the same key as the previous release: a different key would stop phones from updating in place. The workflow needs the signing keystore in the repository's secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, and optionally `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`).

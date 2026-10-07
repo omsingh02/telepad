@@ -25,6 +25,7 @@ Windows, Linux and macOS, over Wi-Fi or Bluetooth. Open source, end-to-end encry
     <td><img src="android/app/src/test/screenshots/pairing-verify.png" width="190" alt="Verifying a PC's fingerprint before trusting it"></td>
     <td><img src="android/app/src/test/screenshots/remote-pad.png" width="190" alt="The touchpad"></td>
     <td><img src="android/app/src/test/screenshots/remote-keys-dark.png" width="190" alt="The keyboard, in dark mode"></td>
+    <td><img src="docs/brand/pc-page.png" width="190" alt="The PC's page with the QR code that pairs a phone"></td>
   </tr>
 </table>
 
@@ -44,14 +45,14 @@ Windows, Linux and macOS, over Wi-Fi or Bluetooth. Open source, end-to-end encry
 
 Telepad consists of two components:
 1. **Android Client** (Kotlin / Jetpack Compose): turns touches, key presses and button taps into mouse, keyboard and media input, and sends them over encrypted UDP or Bluetooth.
-2. **Desktop Server** (Rust): receives the packets, decrypts them, and injects mouse and keyboard events into the desktop through the native input API of each platform: Win32 `SendInput` on Windows, `/dev/uinput` on Linux, and CoreGraphics on macOS.
+2. **Desktop app** (Rust): it sits in the tray (the menu bar on a Mac) and starts when you sign in. It shows the QR code you pair a phone with, receives the packets, decrypts them, and injects mouse and keyboard events into the desktop through the native input API of each platform: Win32 `SendInput` on Windows, `/dev/uinput` on Linux, and CoreGraphics on macOS. The same server is also available as `telepad-server`, a console program for PCs without a desktop and for people who like a terminal.
 
 ### Connection Modes
 
 - **Wi-Fi Mode**:
   - Uses UDP over LAN (default port `5000`).
   - End-to-end encrypted using the **Noise IK** handshake (`Noise_IK_25519_ChaChaPoly_BLAKE2s`).
-  - Uses Trust-On-First-Use (TOFU): the first time, the phone shows a 20-character fingerprint derived from the PC's public key, and you compare it with the one the PC shows. Once confirmed, later connections authenticate automatically. If a paired PC ever answers with a different key, the app warns you instead of connecting.
+  - **Pairing by QR code**: the PC shows a QR code, you scan it with the app, and that is all. The code carries the PC's public key (so there is nothing to compare: it came from the PC's own screen) and a one-time token that lets that one phone pair. If you cannot scan, pick the PC in the list instead and compare the 20-character fingerprint the phone shows with the one the PC shows (Trust-On-First-Use). Once paired, later connections authenticate automatically. If a paired PC ever answers with a different key, the app warns you instead of connecting.
   - The PC also decides who may connect: a phone must be **paired** with the server before it can send input (see [Pairing](#pairing)).
   - Automatic discovery via IPv4 multicast (`239.255.42.67:5000`), broadcasts and, as a fallback, a sweep of the local subnet.
   - The connection is watched: if the PC stops answering the app shows *Reconnecting*, rebuilds the link in the background, and tells you why if it cannot.
@@ -64,16 +65,30 @@ Telepad consists of two components:
 
 ## Downloads
 
-Standalone pre-built binaries are available under [**Releases**](https://github.com/omsingh02/telepad/releases/latest):
+Pre-built files are under [**Releases**](https://github.com/omsingh02/telepad/releases). Pick the one for each of your devices:
 
-| Component | Target Platform | File |
+| For | Platform | File |
 | :--- | :--- | :--- |
-| **Android Client** | Android 9.0+ (API 28+) | `telepad-android.apk` |
-| **Desktop Server** | Windows 10 / 11 (x86_64) | `telepad-server-windows-x86_64.exe` (or `.zip`) |
-| **Desktop Server** | Linux (x86_64, glibc 2.35+) | `telepad-server-linux-x86_64.tar.gz` |
-| **Desktop Server** | macOS 11+ (Apple silicon and Intel) | `telepad-server-macos-universal.tar.gz` |
+| **Your phone** | Android 9.0+ (API 28+) | `telepad-android.apk` |
+| **Your PC** | Windows 10 / 11 (x86_64) | `telepad-windows-x86_64-setup.exe` (installer), or `telepad-windows-x86_64.exe` to run without installing |
+| **Your PC** | macOS 11+ (Apple silicon and Intel) | `telepad-macos-universal.dmg` |
+| **Your PC** | Linux (x86_64, glibc 2.35+) | `telepad-linux-x86_64.tar.gz` (then `./install.sh`) |
+| *Console server* | any of the above, no tray | `telepad-server-windows-x86_64.exe` (or `.zip`), `telepad-server-linux-x86_64.tar.gz`, `telepad-server-macos-universal.tar.gz` |
 
-Each server is a single portable executable with no external runtime dependencies. Every file is also published with the version in its name (for example `telepad-android-v2.0.0.apk`), and all of them are listed with their SHA-256 in `SHA256SUMS`.
+Every file is also published with the version in its name (for example `telepad-android-v2.0.0.apk`). All of them are listed with their SHA-256 in `SHA256SUMS`, and each one has a [build attestation](#checking-a-download): a signed statement of which build, from which commit, produced it.
+
+**Your system may warn you the first time.** Builds are not code-signed yet (see [docs/code-signing.md](docs/code-signing.md)), so Windows shows *Windows protected your PC* (choose **More info**, then **Run anyway**), macOS says it cannot verify the app (**System Settings → Privacy & Security → Open Anyway**), and Android asks to allow installs from your browser or file manager. The warnings go away as signing is set up; until then, [check the download](#checking-a-download) if you want to be sure.
+
+### Checking a download
+
+```bash
+sha256sum -c SHA256SUMS --ignore-missing                       # the file is the one that was published
+gh attestation verify telepad-android.apk --repo omsingh02/telepad   # and GitHub built it from this repository
+```
+
+### Updates
+
+Telepad never connects to the internet by itself, so it does not check for updates. New versions are on the [releases page](https://github.com/omsingh02/telepad/releases) (the tray page has an **Updates** link). To update, install the new file over the old one: the Windows installer and `install.sh` replace the running copy, and the phone app updates in place. To have the phone app updated for you, add this repository to [Obtainium](https://obtainium.imranr.dev) (**Add app**, paste `https://github.com/omsingh02/telepad`, and turn on *Include prereleases* while the releases are alphas). Settings and paired phones are kept across updates.
 
 ### Platform support
 
@@ -107,9 +122,10 @@ Each server is a single portable executable with no external runtime dependencie
 - **A live test pad** in the settings, with a pointer that moves as the real one would.
 
 ### Keyboard
-- **Type with your phone's keyboard**: each edit is sent as it is made. Autocorrect and suggestions work, because the app works out the exact Backspaces and typing that give the PC the same text.
-- **A full keyboard for keybinds**: letters, digits, punctuation, <kbd>F1</kbd>–<kbd>F12</kbd>, <kbd>Esc</kbd>, <kbd>Tab</kbd>, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>PgUp</kbd>, <kbd>PgDn</kbd>, <kbd>Ins</kbd>, <kbd>Del</kbd>, <kbd>PrtSc</kbd> and arrows. Every key goes down when touched and up when released, so holding one repeats.
-- **Modifiers that work like the real thing**: <kbd>Ctrl</kbd>, <kbd>Alt</kbd>, <kbd>Shift</kbd> and <kbd>Win</kbd>/<kbd>⌘</kbd>/<kbd>Super</kbd>. Hold one with a finger and tap keys with another (Super and 2). Or tap it once for the next key, twice to lock it, or hold it alone to press it by itself (Super opens a launcher).
+- **Type with your phone's keyboard**: swipe typing, autocorrect, voice and every language work, because it is the phone's own keyboard. What you type is sent to the PC; words are sent when the keyboard has finished with them, so a correction never reaches the PC as a typo. *Send each key at once* in the menu turns suggestions off and sends every key as it is pressed.
+- **The keys a phone keyboard lacks, right above it**: <kbd>Esc</kbd>, <kbd>Tab</kbd>, <kbd>Ctrl</kbd>, <kbd>Alt</kbd>, <kbd>Shift</kbd>, <kbd>Win</kbd>/<kbd>⌘</kbd>/<kbd>Super</kbd>, the arrows, <kbd>Home</kbd>, <kbd>End</kbd> and <kbd>Del</kbd>, with <kbd>F1</kbd>–<kbd>F12</kbd>, <kbd>PgUp</kbd>, <kbd>PgDn</kbd>, <kbd>Ins</kbd> and <kbd>PrtSc</kbd> one tap away on <kbd>Fn</kbd>. Holding an arrow repeats it on the PC.
+- **Modifiers that work like the real thing**: tap <kbd>Ctrl</kbd> and then a letter on your keyboard, and the PC receives <kbd>Ctrl+C</kbd>. Tap a modifier once for the next key, twice to keep it on, or hold it with one finger while another taps a key. Held on its own for a moment, a key is pressed by itself (<kbd>Super</kbd> opens a launcher). A modifier that is still on is shown on every tab, so it cannot be forgotten.
+- **A PC keyboard for keybinds**: every key of a real keyboard, for the keybinds that need them (choose it from the menu; it is what a phone held sideways shows). The keys' touch areas fill the gaps between them, so a finger between two keys still presses one.
 - **Shortcuts in the PC's own language**: Copy, Paste, Cut, Undo, Redo, Select all, Find, Save, New tab, Close tab, Refresh and Switch app, with the key names and combinations of the PC's operating system (<kbd>Ctrl+C</kbd> on Windows, <kbd>⌘C</kbd> on a Mac).
 - **Clipboard**: *Paste from phone* and *Copy from PC* (Wi-Fi). It is always a button press, never automatic.
 
@@ -207,7 +223,7 @@ Telepad uses a custom compact binary protocol over UDP.
   - Cipher: ChaCha20-Poly1305 (16-byte authentication tag)
   - Hash: BLAKE2s
 - **Wire Framing** (first byte of every UDP datagram):
-  - `0xC0`: `WIRE_HANDSHAKE_INIT` (96 bytes)
+  - `0xC0`: `WIRE_HANDSHAKE_INIT` (96 bytes, plus the pairing token's 16 bytes when the phone pairs by QR code: it travels as the Noise payload of the first message, encrypted to the PC's key)
   - `0xC1`: `WIRE_HANDSHAKE_RESP` (48 bytes)
   - `0xC2`: `WIRE_TRANSPORT` (encrypted payload)
   - `0xC3`: `WIRE_DISCOVERY_PROBE` (magic: `0x54, 0xE7, 0x9A, 0x03, 0x21, 0xC8, 0xBE, 0xFE` or `b"TELEPAD!"`)
@@ -233,6 +249,18 @@ Telepad uses a custom compact binary protocol over UDP.
   - `0x80`: ClipboardData (`[u16 len][utf-8 bytes]`)
   - `0x81`: NowPlaying (`[flags][pos: i64][dur: i64][strings...]`)
   - `0x82`: HostInfo (`[os: u8][capabilities: u8][major][minor][patch]`; `os` is 1 Windows, 2 macOS, 3 Linux; capabilities are `0x01` now-playing and `0x02` clipboard; later versions may append fields, which readers ignore)
+- **Pairing by QR code**: the PC's QR code holds a link, `telepad://pair?...`, which the app also opens when something else (a camera app, a message) hands it over.
+
+  | Field | Meaning |
+  | :--- | :--- |
+  | `v` | format version, `1`. A newer version asks for a newer app |
+  | `k` | the PC's public key, 32 bytes, base64url without padding |
+  | `t` | the one-time pairing token, 16 bytes, base64url without padding |
+  | `p` | the UDP port |
+  | `h` | the PC's IPv4 addresses, comma separated, best first (at most three) |
+  | `n` | the PC's name, percent-encoded |
+
+  The phone looks for the PC at those addresses (or finds it by `k` through discovery), connects with Noise IK to the key `k`, and sends `t` as the payload of the first handshake message. The PC pairs a phone that presents the current token even when no pairing window is open, once, within five minutes (`DEFAULT_INVITATION_TTL`); a new code replaces the old one. A PC that does not know about tokens ignores the payload. Unknown fields are ignored by readers.
 - **Fingerprint Calculation**:
   - `SHA256(server_static_public_key)[0..10]` formatted as five groups of four hex digits: `XXXX · XXXX · XXXX · XXXX · XXXX` (80 bits). The key is not secret, so an impostor can search in advance for a key with a matching fingerprint; 80 bits puts that out of reach (the 48 bits of earlier versions did not). The first three groups equal the shorter fingerprint older versions showed.
 - **Key Storage**:
@@ -267,46 +295,67 @@ The network code is tested end to end against a stand-in PC that speaks the real
 
 ### Wi-Fi Mode
 
-1. **Start the Desktop Server** on your PC (Linux and macOS need a one-time setup first; see [Linux](#linux) and [macOS](#macos)):
-   ```bash
-   # Windows
-   telepad-server-<version>-windows-x86_64.exe
-   # Linux / macOS
-   ./telepad-server
-   ```
-   The server prints its identity and fingerprint:
-   ```
-   ==================================================
-    Telepad Desktop Server v2.0.0 (Rust)
-    Port:        5000
-    Hostname:    DESKTOP-PC
-    Fingerprint: 7F2A · B9C1 · 4E08 · 91D3 · 0AC7
-    Input:       Windows SendInput
-    Pairing:     OPEN for 299 s: connect your phone now
-   ==================================================
-   ```
+1. **Install Telepad on your PC** and open it:
+   - **Windows:** run `telepad-windows-x86_64-setup.exe`. It installs for you only (no administrator prompt), adds Telepad to the Start menu, and offers to start it when you sign in.
+   - **macOS:** open `telepad-macos-universal.dmg` and drag **Telepad** onto **Applications**, then open it. Allow the Accessibility request: without it macOS discards what the phone types and clicks.
+   - **Linux:** unpack `telepad-linux-x86_64.tar.gz` and run `./install.sh` (it installs into `~/.local`, no root needed), then open Telepad from your applications menu. Linux needs a one-time permission for `/dev/uinput` first: see [Linux](#linux).
 
-2. **Connect from Android**:
+   Telepad now sits in the tray, and the first time it opens a page with a **QR code** (click its icon, then **Pair a phone…**, to see it again).
+
+2. **Pair from Android**:
    - Connect the phone to the same local network.
-   - Open Telepad. PCs running the server appear on the **Devices** tab.
-   - Tap your PC, then tap **Pair**.
+   - Open Telepad on the phone and tap **Scan QR code** (on the **Devices** tab), then point the camera at the code on the PC's screen.
+   - That is all: the code carries the PC's key, so there is nothing to compare, and the phone is paired. It connects by itself from then on.
 
-3. **Verify the Fingerprint (first connection only)**:
-   - Check that the code on your phone matches the one in the server console.
-   - Tap **They match**. From now on tapping the PC connects straight away.
+   No camera, or the code will not scan? Pick the PC in the **Devices** list and tap **Pair** instead, then compare the fingerprint the phone shows with the one on the PC's page (first connection only) and tap **They match**.
+
+3. **Optional:** in the tray menu, tick **Start at login**, so that your phone always finds the PC (the Windows installer offers this itself). It is the PC's own startup entry for you only: a registry entry on Windows, a login item (`~/Library/LaunchAgents`) on macOS, an `~/.config/autostart` entry on Linux. Untick it to remove it.
+
+#### Prefer a console?
+
+`telepad-server` is the same server in a terminal window, for a PC without a desktop or if you like to see what it does:
+
+```bash
+# Windows
+telepad-server-<version>-windows-x86_64.exe
+# Linux / macOS
+./telepad-server
+```
+
+It prints its identity and the QR code in the terminal:
+
+```
+==================================================
+ Telepad Desktop Server v2.0.0 (Rust)
+ Port:        5000
+ Hostname:    DESKTOP-PC
+ Fingerprint: 7F2A · B9C1 · 4E08 · 91D3 · 0AC7
+ Input:       Windows SendInput
+ Pairing:     OPEN for 299 s: scan the code below with the app
+==================================================
+
+ Scan this code with the Telepad app: Devices, Add device, Scan QR code.
+ It pairs one phone, and is good for 5 minute(s). If it is cut off, make the window taller.
+ No camera? Open this link on the phone instead: telepad://pair?v=1&k=...
+
+█████████████████████████████████████████████████
+████ ▄▄▄▄▄ █▀ ▄ ▄▀█▀▄█▀█ █▀▄██ ▀█▄ ▄▀█ ▄▄▄▄▄ ████
+...
+```
 
 ### Pairing
 
 A phone can only control the PC after it has been **paired**, and the PC decides when that may happen, so that nobody else on the network can type on your computer.
 
-- **First run:** nothing is paired yet, so the server accepts a new phone for the first 5 minutes. Connect yours in that time.
+- **By QR code (the way to do it):** the tray app shows a QR code on a page of its own when it first starts, and whenever you click its icon and choose **Pair a phone…**; the console server prints it when it first starts, and whenever you type `pair` or `qr`. (The page is served by Telepad to this computer only, under a secret address, and shows a new code every time it is opened.) A phone that scans it pairs, even though no window is open. The code works for one phone, once, for five minutes, and a new code replaces the old one. It carries a secret, so do not show it on a shared screen. On a terminal with a white background the code is drawn inverted; type `qr light` to draw it the other way.
+- **First run:** nothing is paired yet, so the server also accepts a new phone for the first 5 minutes without a code (picking the PC in the app's list). Pairing by QR code is the safer way, because only a phone that has seen the code can use it.
 - **The window is for one phone.** It closes by itself as soon as a phone has paired (or when the time is up), so nobody else on the network can slip in behind yours. The server console says so when it happens.
-- **Adding another phone later:** type `pair` in the server's console window (optionally `pair 120` for 120 seconds), then connect the new phone. Type `close` to shut the window early.
-- **Running without a console** (a service, a startup item): start the server with `--pair` (5 minutes) or `--pair 120` for the window to open at launch.
+- **Adding another phone later:** type `qr` (or `pair`, which also opens the window for 300 seconds, or `pair 120` for 120) in the server's console window, then scan the code with the new phone. Type `close` to shut the window early.
+- **Running without a console** (a service, a startup item): start the server with `--pair` (5 minutes) or `--pair 120` for the window to open at launch. There is no console to show a code in, so phones pair by picking the PC in the list.
 - Paired phones keep working across restarts. `list` shows them, `forget` unpairs all of them.
 - A phone that is not paired is refused, and the server console says so (`refused 192.168.0.23: device ... has not been paired`). The app says so too, and what to do.
 
-Console commands: `pair [seconds]`, `close`, `list`, `forget`, `status`, `help`, `quit`.
+Console commands: `pair [seconds]`, `qr [light]`, `close`, `list`, `forget`, `status`, `help`, `quit`.
 
 > `--insecure-accept-any-client` restores the old behaviour of accepting every phone forever. Anyone who can reach the server's UDP port can then control the machine, so only use it on a network you fully trust.
 
@@ -323,18 +372,20 @@ Console commands: `pair [seconds]`, `close`, `list`, `forget`, `status`, `help`,
 
 ### Linux
 
-The server creates a virtual mouse and keyboard with the kernel's `uinput` interface, so it works under **Wayland and X11** alike. It needs permission to open `/dev/uinput`. Many desktops grant this to the logged-in user automatically; if the server reports "permission denied", set it up once:
+Telepad creates a virtual mouse and keyboard with the kernel's `uinput` interface, so it works under **Wayland and X11** alike. It needs permission to open `/dev/uinput`. Many desktops (and the Arch Linux package) grant this to the person at the computer already; if Telepad reports "permission denied", allow it once with the rule file that comes in the download (`60-telepad-uinput.rules`):
 
 ```bash
 sudo modprobe uinput
-echo uinput | sudo tee /etc/modules-load.d/uinput.conf          # load it at every boot
-echo 'KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"' \
-  | sudo tee /etc/udev/rules.d/60-telepad-uinput.rules
+echo uinput | sudo tee /etc/modules-load.d/telepad.conf          # load it at every boot
+sudo install -m644 60-telepad-uinput.rules /etc/udev/rules.d/
 sudo udevadm control --reload && sudo udevadm trigger
-sudo usermod -aG input "$USER"                                   # then log out and back in
 ```
 
-- Run the server as your normal user, inside your desktop session. Launching programs, locking the screen and the clipboard all need that session.
+The rule gives access to whoever is logged in at the computer, and takes it away at log-out. (The older way, a group, works too: put `KERNEL=="uinput", GROUP="input", MODE="0660"` in a rules file and add yourself to `input`, then log out and in.)
+
+- Run Telepad as your normal user, inside your desktop session. Launching programs, locking the screen and the clipboard all need that session.
+- **The tray icon** is a StatusNotifierItem, which KDE, Cinnamon, XFCE, MATE, Budgie and others show. **GNOME does not** unless you add the *AppIndicator and KStatusNotifierItem Support* extension. Without a tray, Telepad still works: it opens its page when you start it (and when you start it again, which is how to get back to the QR code and the Quit button). A start at login stays quiet.
+- `./install.sh --uninstall` removes what `install.sh` put in `~/.local`, and the start-at-login entry. Your paired phones stay in `~/.config/telepad`.
 - **Typing text** assumes a US-style layout for ASCII characters. Characters outside ASCII (accents, emoji, other scripts) are entered with the `Ctrl+Shift+U` Unicode sequence, which GTK applications and IBus support; some terminals and Qt apps do not. If your layout is not US-compatible (so "y" and "z" come out swapped, for example), start the server with `--text-via-unicode` to type every character that way instead. It works regardless of layout, but only in applications that accept the Unicode sequence.
 - **Quick actions** use what each desktop provides: `Super+D` (show desktop), `Super` (GNOME overview) or `Super+W` (KDE overview), `Print` (screenshot), `xdg-open` (browser and files), `loginctl lock-session` (with several fallbacks) and the first installed system monitor. GNOME and KDE are covered; other desktops may differ.
 - **Clipboard** uses the X11 clipboard (on Wayland, through XWayland). How well that is bridged on a pure-Wayland desktop varies; text typed from the phone does not depend on it.
@@ -342,15 +393,19 @@ sudo usermod -aG input "$USER"                                   # then log out 
 
 ### macOS
 
-- On first use macOS asks you to allow the program to control the computer. Enable it in **System Settings > Privacy & Security > Accessibility** (for the terminal you start it from, or for the binary itself). Without this, macOS silently discards every injected event.
-- The download is not notarised, so macOS quarantines it. Clear that once: `xattr -d com.apple.quarantine ./telepad-server`.
-- The phone's **Win** key acts as **⌘ Command** and **Alt** as **⌥ Option**, as with any PC keyboard on a Mac. To make Windows-style shortcuts work as they do on Windows, start the server with `--mac-ctrl-as-cmd`, which makes the phone's Ctrl act as ⌘ (and Win as Control). The app already sends ⌘ shortcuts when it knows the PC is a Mac.
-- Allow incoming connections when macOS asks, or add the program in **Network > Firewall**.
+- Open the `.dmg` and drag **Telepad** to **Applications**. It is a menu bar app: it has no Dock icon and no window, only an icon at the top of the screen. Open it again from Applications or Spotlight to see the QR code.
+- On first use macOS asks you to allow Telepad to control the computer. Enable it in **System Settings > Privacy & Security > Accessibility**. Without this, macOS silently discards every injected event. (When the app is not yet notarized, macOS forgets this permission after each update: allow it again. A notarized app keeps it.)
+- The download is not notarized yet (see [docs/code-signing.md](docs/code-signing.md)), so macOS says it cannot verify it. Open **System Settings > Privacy & Security**, scroll down, and choose **Open Anyway** once. From a terminal: `xattr -dr com.apple.quarantine /Applications/Telepad.app`. The same goes for the console server: `xattr -d com.apple.quarantine ./telepad-server`.
+- The phone's **Win** key acts as **⌘ Command** and **Alt** as **⌥ Option**, as with any PC keyboard on a Mac. To make Windows-style shortcuts work as they do on Windows, start the console server with `--mac-ctrl-as-cmd`, which makes the phone's Ctrl act as ⌘ (and Win as Control). The app already sends ⌘ shortcuts when it knows the PC is a Mac.
+- Allow incoming connections when macOS asks, or add the program in **Network > Firewall**. macOS may also ask to let Telepad find devices on the local network: allow it.
 
 ### Windows
 
-- Allow inbound UDP port 5000 in Windows Firewall (see [Troubleshooting](#troubleshooting)).
-- The server cannot inject input into elevated windows (an administrator command prompt, UAC prompts) unless it is run as administrator.
+- The installer puts Telepad in `%LOCALAPPDATA%\Programs\Telepad` (no administrator needed) and in **Settings > Apps**, where it can be uninstalled. Running the installer again updates it, and asks the running Telepad to quit first. Uninstalling keeps your paired phones in `%APPDATA%\Telepad`; delete that folder to forget them. To update the portable `.exe` just replace it (and tick **Start at login** again if you move it).
+- **Windows protected your PC** (SmartScreen) appears because the download is not code-signed yet: choose **More info**, then **Run anyway**.
+- Allow inbound UDP port 5000 in Windows Firewall (see [Troubleshooting](#troubleshooting)); Windows usually asks the first time.
+- Telepad cannot inject input into elevated windows (an administrator command prompt, UAC prompts) unless it is run as administrator.
+- The tray icon may be in the hidden icons (the **^** by the clock): drag it out to keep it visible.
 
 ---
 
@@ -367,9 +422,12 @@ sudo usermod -aG input "$USER"                                   # then log out 
 git clone https://github.com/omsingh02/telepad.git
 cd telepad
 
-cargo build --release --bin telepad-server
-# Executable: target/release/telepad-server   (telepad-server.exe on Windows)
+cargo build --release --bin telepad --bin telepad-server
+# target/release/telepad          the tray app (telepad.exe on Windows)
+# target/release/telepad-server   the console server
 ```
+
+The installers and packages are made by scripts in [`packaging/`](packaging/README.md), which the release workflow and CI both use.
 
 Run test suite:
 ```bash
@@ -419,8 +477,33 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for more.
 2. **Access Point Isolation**: some guest Wi-Fi networks and mesh routers block device-to-device UDP traffic.
 3. **Manual IP Connection**: tap **Add device** in the app, choose **Address**, and enter your PC's local IP address (`ipconfig` on Windows, `ip addr` on Linux, `ipconfig getifaddr en0` on macOS). The app asks the PC for its name and key, so you still verify the fingerprint.
 
+### Telepad has no icon, or I cannot find it
+- **Windows:** look under the **^** by the clock. **macOS:** the menu bar, at the top right. **Linux:** see the [tray note](#linux); on GNOME without the AppIndicator extension there is no icon, and starting Telepad again (from the applications menu) opens its page.
+- Starting Telepad a second time never starts a second copy: it opens the page of the one that is running. `telepad --quit` asks the running one to quit.
+- It writes nothing to your screen on Windows when something goes wrong at start: it shows a message box instead. Run it from a terminal with `--verbose` to see details (on Windows use the console server, `telepad-server`, for that).
+
+### Reporting a problem, and where the log is
+Open an [issue](https://github.com/omsingh02/telepad/issues/new/choose) (the tray page's **Report a problem** link does that). It helps to say the version (the tray page shows it, and the phone app under **Settings → About**) and to attach the desktop app's log, which holds what the program did and never what you typed. The page shows where it is; usually:
+
+| | |
+| :--- | :--- |
+| Windows | `%APPDATA%\Telepad\telepad.log` |
+| macOS | `~/Library/Application Support/Telepad/telepad.log` |
+| Linux | `~/.config/telepad/telepad.log` |
+
+For more detail start the program with `--verbose` (the console server prints it to the terminal). Look through the log before you share it: it has your PC's name and the addresses of your phones.
+
+### The QR code will not scan
+- **On the tray app's page** the code is drawn for you: make the page bigger (zoom the browser) if the phone struggles.
+- **In the console server, make the terminal window taller.** The code is about 25 lines high, and a code that is cut off cannot be read. The instructions above it scroll away first.
+- **A terminal with a white background** shows the code inverted. The Telepad app reads it either way, but another scanner may not: type `qr light` in the server console.
+- **Hold the phone steadier and closer**, and turn up the screen's brightness. Increasing the terminal's font size makes the code bigger too.
+- **The camera is off for Telepad.** Turn it on in the phone's settings for the app; the scanner says so and has a button for it.
+- **No camera, or still no luck:** copy the `telepad://pair?...` link the server prints, send it to the phone and open it there, or pick the PC in the **Devices** list and compare the fingerprint.
+- **"The code has expired"** (the app says the PC has not accepted the phone): a code lasts five minutes and works once. Click the tray icon and choose **Pair a phone…** (or type `qr` in the console server) for a new one.
+
 ### "…hasn't accepted this phone"
-The server console probably says `refused ...: device ... has not been paired`. Type `pair` in the server console (or restart with `--pair`) and tap **Try again**.
+The PC refused the phone because it has not been paired. Scan the QR code from **Pair a phone…** in the tray menu (or type `pair` in the console server, or restart it with `--pair`) and tap **Try again**.
 
 ### The server will not start on Linux ("permission denied" on /dev/uinput)
 Follow the [Linux setup](#linux). Use `--no-input` to run the protocol without injecting input, which is handy for diagnostics.
@@ -449,18 +532,23 @@ telepad/
 │   ├── app/src/test/           # unit, network, screen and screenshot tests
 │   └── app/src/test/screenshots/   # the pictures of every screen
 ├── crates/                     # Rust Desktop Server Workspace
-│   ├── telepad-server/         # Tokio UDP server: discovery, pairing, sessions, console
+│   ├── telepad-server/         # Tokio UDP server: discovery, pairing, invitations (QR), sessions, console
+│   ├── telepad-tray/           # the `telepad` app: tray icon, the page with the QR code, start at login
 │   ├── telepad-platform/       # OS layer: Windows SendInput, Linux uinput, macOS CoreGraphics,
-│   │                           #   clipboard, network interfaces, config paths
+│   │                           #   clipboard, network interfaces, config paths, start at login
 │   ├── telepad-crypto/         # Noise IK handshake, ChaCha20-Poly1305, key storage
 │   └── telepad-protocol/       # Binary wire protocol definitions and codecs
+├── packaging/                  # Windows installer, macOS app and disk image, Linux tarball, icons
 ├── website/                    # the landing page (plain HTML and CSS, served by Vercel)
-├── docs/                       # brand assets (logo, social image) and the manual test plan
+├── docs/                       # brand assets, the manual test plan, the code-signing guide
 ├── .github/                    # CI and release workflows, issue and pull request templates
 ├── Cargo.toml                  # Cargo workspace
 ├── CHANGELOG.md                # what changed in each release
 ├── CONTRIBUTING.md             # how to build, test and contribute
 ├── SECURITY.md                 # security model and how to report a vulnerability
+├── PRIVACY.md                  # what Telepad collects (nothing) and where data goes
+├── THIRD_PARTY_LICENSES.md     # licenses of the libraries in the desktop programs (made from Cargo.lock)
+├── CODE_OF_CONDUCT.md
 └── README.md
 ```
 
@@ -468,7 +556,9 @@ telepad/
 
 ## Contributing
 
-Bug reports, ideas and patches are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains how to build and test both halves, and [SECURITY.md](SECURITY.md) how to report a vulnerability privately.
+Bug reports, ideas and patches are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains how to build and test both halves, [SECURITY.md](SECURITY.md) how to report a vulnerability privately, and the [Code of Conduct](CODE_OF_CONDUCT.md) how we treat each other. Questions are welcome in [Discussions](https://github.com/omsingh02/telepad/discussions).
+
+Telepad collects no data: see [PRIVACY.md](PRIVACY.md). The licenses of the libraries inside it are in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) (the desktop programs) and under **Settings → About** in the phone app.
 
 ## License
 
