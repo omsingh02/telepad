@@ -44,6 +44,8 @@ Some tests need the real operating system: the Linux `uinput` tests skip themsel
 
 You need JDK 17 and the Android SDK (platform 35). Point Gradle at the SDK with `ANDROID_HOME` or an `sdk.dir=` line in `android/local.properties` (the file is ignored by git).
 
+Gradle 8.10 cannot run on very new Java versions. If your default Java is one of those (on Java 27 it stops with just `What went wrong: 27`), run it with a JDK 17 instead: `JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./gradlew testDebugUnitTest`.
+
 ```bash
 cd android
 ./gradlew testDebugUnitTest      # logic, networking against a stand-in PC, every screen

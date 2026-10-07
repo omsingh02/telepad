@@ -359,7 +359,7 @@ sudo usermod -aG input "$USER"                                   # then log out 
 ### Prerequisites
 - **Rust**: a current stable toolchain (`rustup toolchain install stable`). CI builds with stable; no older version is tested.
 - **Linux only**: the X11 client libraries used by the clipboard (`sudo apt-get install libxcb-shape0-dev libxcb-xfixes0-dev` on Debian/Ubuntu)
-- **Android**: JDK 17, Android SDK 35
+- **Android**: JDK 17, Android SDK 35 (a much newer default Java, such as 27, stops Gradle with `What went wrong: 27`: set `JAVA_HOME` to a JDK 17)
 
 ### 1. Build Desktop Server (Rust)
 
