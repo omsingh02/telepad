@@ -1,0 +1,1 @@
+A new desktop app with a tray icon, QR-code pairing and start at login for Windows, Linux and macOS; a keyboard rebuilt around your phone's own keyboard, with the keys it lacks docked above it and modifiers that stay lit; a redesigned app.

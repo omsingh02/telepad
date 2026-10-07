@@ -1,0 +1,19 @@
+Telepad turns your phone into a wireless trackpad, keyboard and media remote for your Windows, Linux or Mac computer, over your Wi-Fi or over Bluetooth.
+
+<b>Set up in a minute</b>
+Install Telepad on your computer (a small app that sits in the tray or menu bar and can start with the computer), open this app, tap Scan QR code and point the camera at the code on the computer's screen. That pairs the two. There is no account to make and nothing to type.
+
+<b>A trackpad that works like a laptop's</b>
+Move, tap, double-tap, drag, right-click, middle-click and scroll with momentum, with a scroll strip along the edge and mouse buttons that really hold.
+
+<b>A keyboard for the computer, not just for the phone</b>
+Type with your phone's own keyboard (swipe typing, autocorrect and voice work), with the keys it lacks right above it: Esc, Tab, Ctrl, Alt, Shift, Win or Command, the arrows, Home, End, Delete, and F1 to F12 one tap away. Tap Ctrl, then a letter, to send Ctrl+C. A full PC keyboard is a menu choice away, for keybinds.
+
+<b>Media, slides and shortcuts</b>
+Play, pause and volume, slide controls, and one-tap actions in the computer's own language: copy, paste, switch app, show desktop, lock the screen.
+
+<b>Private by design</b>
+Everything between your phone and your computer is encrypted end to end (the Noise protocol). The app has no account, no analytics, no ads and no tracking, and nothing leaves your own network. It is free and open source (MIT).
+
+<b>You need Telepad on the computer too</b>
+Get it for Windows, macOS and Linux at https://telepad-app.vercel.app. (Bluetooth mode needs nothing on the computer: the phone shows up as a Bluetooth keyboard and mouse.)

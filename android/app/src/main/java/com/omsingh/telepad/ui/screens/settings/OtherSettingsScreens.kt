@@ -332,7 +332,7 @@ private fun ConfirmDialog(title: String, body: String, confirm: String, onConfir
 // ── About ────────────────────────────────────────────────────────────
 
 @Composable
-fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun AboutScreen(onBack: () -> Unit, onLicenses: () -> Unit, modifier: Modifier = Modifier) {
     val platform = LocalPlatformActions.current
     SettingsScaffold(title = stringResource(R.string.settings_about), onBack = onBack, modifier = modifier) {
         Column(
@@ -353,8 +353,14 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             OutlinedButton(onClick = { platform.openUrl(Links.ISSUES) }, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.about_issues))
             }
+            OutlinedButton(onClick = { platform.openUrl(Links.PRIVACY) }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.about_privacy))
+            }
             Text(stringResource(R.string.about_libraries_title), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = Spacing.md))
             Text(stringResource(R.string.about_libraries), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = onLicenses, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.about_licenses))
+            }
         }
     }
 }
