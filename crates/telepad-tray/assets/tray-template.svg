@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <!-- The macOS menu bar wants a black shape on a transparent ground (a "template image"): the system
+       draws it white on a dark bar and black on a light one. Same drawing as the app icon. -->
+  <g transform="translate(54 54) scale(1.5) translate(-54 -54)" fill="none" stroke="#000" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M35,35H73A7,7 0 0 1 80,42V66A7,7 0 0 1 73,73H35A7,7 0 0 1 28,66V42A7,7 0 0 1 35,35Z" stroke-width="4.6"/>
+    <path d="M29.6,62H78.4M54,62V71.4" stroke-width="3.2"/>
+    <path d="M44,41L44,58L48.5,53.8L51.8,61L55,59.6L51.7,52.6L58,52.2Z" fill="#000" stroke-width="1.6"/>
+  </g>
+</svg>

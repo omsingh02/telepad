@@ -4,6 +4,7 @@ members = [
     "crates/telepad-crypto",
     "crates/telepad-platform",
     "crates/telepad-server",
+    "crates/telepad-tray",
 ]
 resolver = "2"
 

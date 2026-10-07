@@ -5,6 +5,8 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+# Programs and libraries of this project only: nothing here is published to crates.io.
+publish = false
 
 [dependencies]
 telepad-protocol = { path = "../telepad-protocol" }
@@ -42,5 +44,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_System_SystemServices",
     "Win32_System_Shutdown",
+    "Win32_System_Registry",
+    "Win32_Security",
     "Win32_UI_WindowsAndMessaging",
 ] }

@@ -8,7 +8,9 @@
 //! * [`clipboard`]: read and write the text clipboard.
 //! * [`netif`]: enumerate local IPv4 networks for discovery.
 //! * [`paths`]: where per-user configuration lives.
+//! * [`autostart`]: starting at login.
 
+pub mod autostart;
 pub mod backend;
 pub mod clipboard;
 pub mod keymap;
