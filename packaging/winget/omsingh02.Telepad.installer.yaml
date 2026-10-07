@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
 PackageIdentifier: omsingh02.Telepad
-PackageVersion: 2.0.0-alpha.2
+PackageVersion: 2.0.0-alpha.3
 InstallerType: inno
 Scope: user
 InstallModes:
@@ -10,7 +10,7 @@ InstallModes:
 UpgradeBehavior: install
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.2/telepad-v2.0.0-alpha.2-windows-x86_64-setup.exe
-    InstallerSha256: 2D61B6559762CADDAE1DDF95D4F22E8238A0A92217F2A6C9CE92588B89C62BA2
+    InstallerUrl: https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.3/telepad-v2.0.0-alpha.3-windows-x86_64-setup.exe
+    InstallerSha256: 8602407DC0A8C417C3E16A154FDF511055EF7DF1D91AB4647C671327122A7159
 ManifestType: installer
 ManifestVersion: 1.6.0

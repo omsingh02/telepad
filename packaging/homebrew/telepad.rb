@@ -5,8 +5,8 @@
 #
 # scripts/update-package-manifests.sh <tag> fills in the version and the checksum from a release.
 cask "telepad" do
-  version "2.0.0-alpha.2"
-  sha256 "de18a0bcdeb641ebc9c1bf1fd5465728f89d5fc750d1c0d96ff8faf374c1acf5"
+  version "2.0.0-alpha.3"
+  sha256 "1bd0d31823ec59b012f59e3592ca83dd0dc9b93950aa46b813cd5e171d5fa7f3"
 
   url "https://github.com/omsingh02/telepad/releases/download/v#{version}/telepad-v#{version}-macos-universal.dmg"
   name "Telepad"
