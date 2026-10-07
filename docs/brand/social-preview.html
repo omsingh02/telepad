@@ -1,0 +1,77 @@
+<!doctype html>
+<!--
+  Source of the social images: docs/brand/social-preview.png (1280x640, GitHub's "social preview")
+  and website/assets/img/og.png (1200x630, for link previews of the website).
+  Rendered by docs/brand/export.sh. Open it in a browser to see it; add ?og for the 1200x630 version.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Telepad social preview</title>
+  <style>
+    @font-face { font-family: "Cal Sans"; src: url("../../website/assets/fonts/cal-sans.woff2") format("woff2"); }
+    @font-face { font-family: "Inter"; src: url("../../website/assets/fonts/inter-var.woff2") format("woff2"); font-weight: 400 700; }
+
+    * { box-sizing: border-box; margin: 0; }
+    html, body { background: #060a13; overflow: hidden; }
+    body { width: 1280px; height: 640px; }
+    body.og { width: 1200px; height: 630px; }
+
+    .card {
+      position: relative; width: 1280px; height: 640px; overflow: hidden;
+      transform-origin: 0 0;
+      font-family: "Inter", system-ui, sans-serif; color: #e8eef8;
+      background:
+        radial-gradient(52% 62% at 82% 10%, rgba(59, 130, 246, 0.34), transparent 70%),
+        radial-gradient(46% 52% at 8% 0%, rgba(56, 189, 248, 0.2), transparent 70%),
+        #060a13;
+    }
+    body.og .card { height: 672px; transform: scale(0.9375); }
+
+    .grid {
+      position: absolute; inset: 0;
+      background-image: linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+      background-size: 56px 56px;
+      -webkit-mask-image: radial-gradient(ellipse 80% 80% at 60% 30%, #000 10%, transparent 75%);
+      mask-image: radial-gradient(ellipse 80% 80% at 60% 30%, #000 10%, transparent 75%);
+    }
+
+    .copy { position: absolute; left: 72px; top: 0; bottom: 0; width: 560px; display: flex; flex-direction: column; justify-content: center; }
+    .logo { height: 54px; width: auto; align-self: flex-start; margin-bottom: 38px; }
+    h1 { font: 400 62px/1.08 "Cal Sans", "Inter", sans-serif; word-spacing: 0.12em; }
+    h1 span { background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 45%, #3b82f6 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .sub { margin-top: 28px; font-size: 22px; line-height: 1.55; color: #a9b6ca; }
+    .sub b { color: #e8eef8; font-weight: 600; }
+
+    .phones { position: absolute; right: -34px; top: 0; width: 600px; height: 100%; }
+    .phone {
+      position: absolute; padding: 8px; background: linear-gradient(155deg, #435571 0%, #131c2c 36%, #090e18 100%);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 40px 90px -30px rgba(0, 0, 0, 0.9), 0 0 120px -30px rgba(56, 189, 248, 0.55);
+    }
+    .phone img { display: block; width: 100%; }
+    .phone::after { content: ""; position: absolute; left: 50%; top: 14px; width: 11px; height: 11px; margin-left: -5.5px; border-radius: 50%; background: #02050a; }
+    .p-center { width: 292px; left: 154px; top: 86px; border-radius: 40px; z-index: 3; }
+    .p-center img { border-radius: 32px; }
+    .p-left { width: 232px; left: -24px; top: 190px; border-radius: 32px; transform: rotate(-8deg); z-index: 2; }
+    .p-left img { border-radius: 25px; }
+    .p-right { width: 232px; left: 376px; top: 214px; border-radius: 32px; transform: rotate(8deg); z-index: 1; }
+    .p-right img { border-radius: 25px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="grid"></div>
+    <div class="copy">
+      <img class="logo" src="logo-dark.svg" alt="Telepad">
+      <h1>Your phone is your PC’s <span>trackpad</span> and keyboard.</h1>
+      <p class="sub"><b>Open source</b> · Windows, Linux and macOS<br>Encrypted end to end · No account</p>
+    </div>
+    <div class="phones">
+      <div class="phone p-left"><img src="../../android/app/src/test/screenshots/devices-connected.png" alt=""></div>
+      <div class="phone p-right"><img src="../../android/app/src/test/screenshots/remote-keys-dark.png" alt=""></div>
+      <div class="phone p-center"><img src="../../android/app/src/test/screenshots/remote-pad.png" alt=""></div>
+    </div>
+  </div>
+  <script>if (location.search.includes('og')) document.body.classList.add('og');</script>
+</body>
+</html>

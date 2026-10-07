@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="512" height="512" role="img" aria-label="Telepad">
+  <title>Telepad</title>
+  <defs>
+    <linearGradient id="tp-bg" x1="0" y1="0" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1E293B"/>
+      <stop offset="1" stop-color="#0B1220"/>
+    </linearGradient>
+    <linearGradient id="tp-pointer" x1="44" y1="41" x2="58" y2="61" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7DD3FC"/>
+      <stop offset=".5" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <clipPath id="tp-shape"><rect width="108" height="108" rx="24"/></clipPath>
+  </defs>
+  <g clip-path="url(#tp-shape)">
+    <rect width="108" height="108" fill="url(#tp-bg)"/>
+    <g transform="translate(54 54) scale(1.3) translate(-54 -54)">
+      <path d="M35,35H73A7,7 0 0 1 80,42V66A7,7 0 0 1 73,73H35A7,7 0 0 1 28,66V42A7,7 0 0 1 35,35Z" fill="#fff" fill-opacity=".14" stroke="#fff" stroke-opacity=".95" stroke-width="3.2"/>
+      <path d="M29.6,62H78.4M54,62V71.4" stroke="#fff" stroke-opacity=".5" stroke-width="2.2" fill="none"/>
+      <path d="M44,41L44,58L48.5,53.8L51.8,61L55,59.6L51.7,52.6L58,52.2Z" fill="url(#tp-pointer)"/>
+    </g>
+    <rect x=".5" y=".5" width="107" height="107" rx="23.5" fill="none" stroke="#fff" stroke-opacity=".16"/>
+  </g>
+</svg>

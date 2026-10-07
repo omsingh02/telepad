@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Telepad: your phone as a trackpad and keyboard for your PC</title>
+  <meta name="description" content="Telepad turns your Android phone into a trackpad, keyboard and media remote for Windows, Linux and macOS. Open source, end-to-end encrypted, no account.">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#060a13">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4fbff">
+  <link rel="canonical" href="https://telepad-app.vercel.app/">
+
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/img/favicon.ico" sizes="32x32">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Telepad">
+  <meta property="og:title" content="Telepad: your phone as a trackpad and keyboard for your PC">
+  <meta property="og:description" content="An Android trackpad, keyboard and media remote for Windows, Linux and macOS. Open source, end-to-end encrypted, no account.">
+  <meta property="og:url" content="https://telepad-app.vercel.app/">
+  <meta property="og:image" content="https://telepad-app.vercel.app/assets/img/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Telepad logo next to three phone screens showing its trackpad, keyboard and device list.">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="preload" href="assets/fonts/cal-sans.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/site.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Telepad",
+    "description": "Use your Android phone as a trackpad, keyboard and media remote for Windows, Linux and macOS.",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Android 9+, Windows 10+, Linux, macOS 11+",
+    "license": "https://opensource.org/license/mit",
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "codeRepository": "https://github.com/omsingh02/telepad",
+    "image": "https://telepad-app.vercel.app/assets/img/og.png"
+  }
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap bar">
+      <a class="brand" href="./" aria-label="Telepad home">
+        <picture>
+          <source srcset="assets/img/logo-dark.svg" media="(prefers-color-scheme: dark)">
+          <img src="assets/img/logo.svg" width="170" height="43" alt="Telepad">
+        </picture>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="#how">How it works</a>
+        <a href="#features">Features</a>
+        <a href="#security">Security</a>
+        <a href="#download">Download</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <div class="bar-actions">
+        <a class="btn btn-small btn-secondary" href="https://github.com/omsingh02/telepad">
+          <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-star"/></svg>
+          <span>GitHub</span>
+        </a>
+        <a class="btn btn-small btn-primary bar-download" href="#download">Download</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="dot" aria-hidden="true"></span> Open source · MIT license</p>
+          <h1>Your phone is your PC’s <span class="grad">trackpad</span> and keyboard.</h1>
+          <p class="lede">Telepad turns an Android phone into a trackpad, keyboard and media remote for Windows, Linux and macOS, over Wi‑Fi or Bluetooth. End-to-end encrypted. No account, no cloud.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary btn-large" href="#download">
+              <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg>
+              Download
+            </a>
+            <a class="btn btn-secondary btn-large" href="https://github.com/omsingh02/telepad">
+              <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-star"/></svg>
+              Star on GitHub
+            </a>
+          </div>
+          <ul class="trust">
+            <li><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-lock"/></svg> Encrypted end to end</li>
+            <li><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-user-off"/></svg> No account</li>
+            <li><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-eye-off"/></svg> No tracking</li>
+          </ul>
+        </div>
+
+        <div class="hero-art">
+          <div class="art-glow" aria-hidden="true"></div>
+          <figure class="device d-left">
+            <picture>
+              <source srcset="assets/img/screens/devices-connected.avif" type="image/avif">
+              <img src="assets/img/screens/devices-connected.webp" width="640" height="1300" alt="Telepad's Devices screen: connected to Desk PC over Wi‑Fi, 4 milliseconds." decoding="async">
+            </picture>
+          </figure>
+          <figure class="device d-right">
+            <picture>
+              <source srcset="assets/img/screens/remote-keys-dark.avif" type="image/avif">
+              <img src="assets/img/screens/remote-keys-dark.webp" width="640" height="1300" alt="The Keys tab in dark mode: a text field, special keys and shortcuts such as Copy, Paste and Undo." decoding="async">
+            </picture>
+          </figure>
+          <figure class="device d-center">
+            <picture>
+              <source srcset="assets/img/screens/remote-pad.avif" type="image/avif">
+              <img src="assets/img/screens/remote-pad.webp" width="640" height="1300" alt="The Pad tab: a large trackpad with a scroll strip and Left and Right buttons." fetchpriority="high" decoding="async">
+            </picture>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- Platforms -->
+    <section class="platforms" aria-label="Supported systems">
+      <div class="wrap">
+        <ul>
+          <li><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-phone"/></svg> Android 9+</li>
+          <li><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-monitor"/></svg> Windows 10 and 11</li>
+          <li><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-terminal"/></svg> Linux, Wayland and X11</li>
+          <li><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-laptop"/></svg> macOS 11+</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section" id="how">
+      <div class="wrap">
+        <header class="section-head reveal">
+          <p class="kicker">How it works</p>
+          <h2>Set up in about a minute.</h2>
+          <p>No account to create and no cloud in between. Your phone talks straight to your PC.</p>
+        </header>
+
+        <ol class="steps">
+          <li class="step reveal">
+            <div class="step-art">
+              <div class="terminal" role="img" aria-label="Terminal output of the Telepad desktop app, showing its port, hostname and a fingerprint.">
+                <div class="terminal-bar"><span></span><span></span><span></span></div>
+<pre><b>$ ./telepad-server</b>
+ Telepad Desktop Server v2.0.0
+ Port:        5000
+ Hostname:    DESKTOP-PC
+ Fingerprint: <em>7F2A · B9C1 · 4E08</em>
+              <em>91D3 · 0AC7</em>
+ Input:       Windows SendInput
+ Pairing:     OPEN for 299 s</pre>
+              </div>
+            </div>
+            <span class="step-n">1</span>
+            <h3>Start Telepad on your PC</h3>
+            <p>Download one small file and run it. There is no installer and nothing else to set up. It prints a short code that identifies your PC.</p>
+          </li>
+          <li class="step reveal">
+            <div class="step-art step-shot">
+              <picture>
+                <source srcset="assets/img/screens/devices-connected.avif" type="image/avif">
+                <img src="assets/img/screens/devices-connected.webp" width="640" height="1300" alt="The Devices screen listing Desk PC, a MacBook and a nearby PC with a Pair button." loading="lazy" decoding="async">
+              </picture>
+            </div>
+            <span class="step-n">2</span>
+            <h3>Open the app, pick your PC</h3>
+            <p>Telepad finds computers on your Wi‑Fi by itself. Tap yours, then tap <b>Pair</b>.</p>
+          </li>
+          <li class="step reveal">
+            <div class="step-art step-shot from-bottom">
+              <picture>
+                <source srcset="assets/img/screens/pairing-verify.avif" type="image/avif">
+                <img src="assets/img/screens/pairing-verify.webp" width="640" height="1300" alt="The Verify this PC sheet: a short code to compare with the one on the PC, and a They match button." loading="lazy" decoding="async">
+              </picture>
+            </div>
+            <span class="step-n">3</span>
+            <h3>Check the code, once</h3>
+            <p>If the code on your phone matches the one on your PC, tap <b>They match</b>. You’re paired, and from then on it just connects.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="section" id="features">
+      <div class="wrap">
+        <header class="section-head reveal">
+          <p class="kicker">Features</p>
+          <h2>Everything you would want from a laptop trackpad.</h2>
+          <p>And a few things you can only do with a phone.</p>
+        </header>
+
+        <article class="feature reveal">
+          <div class="feature-text">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-touchpad"/></svg></span>
+            <h3>A trackpad that behaves like one</h3>
+            <p>Tap to click, two fingers to scroll, tap and drag to select, press and hold for a right click, three fingers for a middle click. The pad shows what it understood, so you learn it by using it.</p>
+            <ul class="ticks">
+              <li>Momentum scrolling, plus a scroll strip for one finger</li>
+              <li>Real mouse buttons that you can hold while you drag</li>
+              <li>Pointer speed and four acceleration curves, with a pad in the settings to try them on</li>
+            </ul>
+          </div>
+          <div class="feature-art">
+            <figure class="device d-feature">
+              <picture>
+                <source srcset="assets/img/screens/remote-pad-dark.avif" type="image/avif">
+                <img src="assets/img/screens/remote-pad-dark.webp" width="640" height="1300" alt="The trackpad in dark mode." loading="lazy" decoding="async">
+              </picture>
+            </figure>
+          </div>
+        </article>
+
+        <article class="feature feature-flip reveal">
+          <div class="feature-text">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-keyboard"/></svg></span>
+            <h3>A keyboard that speaks your PC’s language</h3>
+            <p>Type with your phone’s own keyboard, autocorrect and all. Telepad works out the exact keystrokes that give your PC the same text. For everything a phone keyboard lacks, there is a row of real keys.</p>
+            <ul class="ticks">
+              <li>A full keyboard for keybinds: hold Super with one finger and tap with another, or tap it once for the next key, twice to lock</li>
+              <li>Shortcuts with the right keys for Windows, macOS or Linux</li>
+              <li>Copy text from the phone to the PC and back, only when you press the button</li>
+            </ul>
+          </div>
+          <div class="feature-art">
+            <figure class="device d-feature">
+              <picture>
+                <source srcset="assets/img/screens/remote-keys-mac.avif" type="image/avif">
+                <img src="assets/img/screens/remote-keys-mac.webp" width="640" height="1300" alt="The Keys tab for a Mac: modifier keys shown as ⌃ ⌥ ⇧ ⌘, and shortcuts such as Copy ⌘C." loading="lazy" decoding="async">
+              </picture>
+            </figure>
+          </div>
+        </article>
+
+        <article class="feature reveal">
+          <div class="feature-text">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-play"/></svg></span>
+            <h3>Media, slides and PC actions</h3>
+            <p>Play, pause and skip. Turn the volume up or down, and hold the button to keep going. Use the phone as a slide clicker, or jump straight to show desktop, task view, a screenshot or the lock screen.</p>
+            <ul class="ticks">
+              <li>Slide controls with start, black screen and end</li>
+              <li>Actions named for your system: Task view, Mission Control or Overview</li>
+              <li>Uses your system’s media keys, so it works with most players</li>
+            </ul>
+          </div>
+          <div class="feature-art">
+            <figure class="device d-feature">
+              <picture>
+                <source srcset="assets/img/screens/remote-media.avif" type="image/avif">
+                <img src="assets/img/screens/remote-media.webp" width="640" height="1300" alt="The Media tab: play and skip buttons, volume, slide controls and PC actions." loading="lazy" decoding="async">
+              </picture>
+            </figure>
+          </div>
+        </article>
+
+        <div class="minis">
+          <article class="mini reveal">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-wifi"/></svg></span>
+            <h3>Wi‑Fi or Bluetooth</h3>
+            <p>Wi‑Fi gives you everything, including the clipboard. Bluetooth makes your phone a standard keyboard and mouse, so the PC needs no app at all.</p>
+          </article>
+          <article class="mini reveal">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-refresh"/></svg></span>
+            <h3>Reconnects by itself</h3>
+            <p>If the Wi‑Fi hiccups, Telepad notices and reconnects quietly, and tells you why if it can’t. You can also keep it connected in the background.</p>
+          </article>
+          <article class="mini reveal">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-palette"/></svg></span>
+            <h3>Looks like it belongs</h3>
+            <p>Material 3, light and dark, in an accent you choose or your wallpaper’s colors. Built for phones, tablets and landscape.</p>
+          </article>
+          <article class="mini reveal">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-access"/></svg></span>
+            <h3>Made for everyone</h3>
+            <p>Works with TalkBack, large text and reduced motion. Text and icon colors are tested against WCAG contrast.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Gallery -->
+    <section class="section section-tight" id="gallery" aria-labelledby="gallery-title">
+      <div class="wrap">
+        <header class="section-head reveal">
+          <p class="kicker">A closer look</p>
+          <h2 id="gallery-title">Light, dark and everything between.</h2>
+        </header>
+      </div>
+      <div class="gallery-wrap">
+        <div class="gallery" id="gallery-track" tabindex="0" role="group" aria-label="App screenshots, scroll sideways">
+          <figure class="shot">
+            <div class="device d-gallery"><picture><source srcset="assets/img/screens/devices-list-dark.avif" type="image/avif"><img src="assets/img/screens/devices-list-dark.webp" width="640" height="1300" alt="The device list in dark mode." loading="lazy" decoding="async"></picture></div>
+            <figcaption>Your PCs, found automatically</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="device d-gallery"><picture><source srcset="assets/img/screens/remote-pad.avif" type="image/avif"><img src="assets/img/screens/remote-pad.webp" width="640" height="1300" alt="The trackpad in light mode." loading="lazy" decoding="async"></picture></div>
+            <figcaption>The trackpad</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="device d-gallery"><picture><source srcset="assets/img/screens/remote-keys.avif" type="image/avif"><img src="assets/img/screens/remote-keys.webp" width="640" height="1300" alt="The Keys tab for a Windows PC." loading="lazy" decoding="async"></picture></div>
+            <figcaption>Keys and shortcuts</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="device d-gallery"><picture><source srcset="assets/img/screens/remote-media-dark.avif" type="image/avif"><img src="assets/img/screens/remote-media-dark.webp" width="640" height="1300" alt="The Media tab in dark mode." loading="lazy" decoding="async"></picture></div>
+            <figcaption>Media and slides</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="device d-gallery"><picture><source srcset="assets/img/screens/settings-touchpad.avif" type="image/avif"><img src="assets/img/screens/settings-touchpad.webp" width="640" height="1300" alt="Touchpad settings with a pad to try them on." loading="lazy" decoding="async"></picture></div>
+            <figcaption>Tune it on a live pad</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="device d-gallery"><picture><source srcset="assets/img/screens/settings-appearance.avif" type="image/avif"><img src="assets/img/screens/settings-appearance.webp" width="640" height="1300" alt="Appearance settings: theme and accent color." loading="lazy" decoding="async"></picture></div>
+            <figcaption>Your accent color</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="device d-gallery"><picture><source srcset="assets/img/screens/settings-privacy.avif" type="image/avif"><img src="assets/img/screens/settings-privacy.webp" width="640" height="1300" alt="Privacy and security settings listing paired PCs and their fingerprints." loading="lazy" decoding="async"></picture></div>
+            <figcaption>You decide who is paired</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="device d-gallery"><picture><source srcset="assets/img/screens/onboarding.avif" type="image/avif"><img src="assets/img/screens/onboarding.webp" width="640" height="1300" alt="The first screen of the walkthrough." loading="lazy" decoding="async"></picture></div>
+            <figcaption>A short walkthrough</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="device d-tablet"><picture><source srcset="assets/img/screens/remote-pad-tablet.avif" type="image/avif"><img src="assets/img/screens/remote-pad-tablet.webp" width="900" height="1368" alt="The trackpad on a tablet, with a larger pad." loading="lazy" decoding="async"></picture></div>
+            <figcaption>Tablets get a bigger pad</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="device d-landscape"><picture><source srcset="assets/img/screens/remote-pad-landscape.avif" type="image/avif"><img src="assets/img/screens/remote-pad-landscape.webp" width="1100" height="448" alt="The trackpad with the phone held sideways." loading="lazy" decoding="async"></picture></div>
+            <figcaption>And sideways, too</figcaption>
+          </figure>
+        </div>
+        <div class="gallery-controls">
+          <button class="icon-btn" type="button" data-gallery="prev" aria-label="Scroll screenshots left"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-left"/></svg></button>
+          <button class="icon-btn" type="button" data-gallery="next" aria-label="Scroll screenshots right"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-arrow"/></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Security -->
+    <section class="section" id="security">
+      <div class="wrap">
+        <div class="security reveal">
+          <div class="security-copy">
+            <p class="kicker">Security</p>
+            <h2>Private by design. Verified, not just trusted.</h2>
+            <p class="lead">What you type controls your computer, so Telepad treats it that way.</p>
+            <ul class="points">
+              <li>
+                <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-lock"/></svg>
+                <div><h3>Encrypted end to end</h3><p>The Noise protocol with X25519 and ChaCha20-Poly1305. Nothing on your network can read your typing, change it or play it back.</p></div>
+              </li>
+              <li>
+                <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-key"/></svg>
+                <div><h3>You verify your PC, once</h3><p>The phone and the PC both show an 80-bit fingerprint of the PC’s key. If they match, you are talking to your PC. If a PC ever answers with a different key, the app warns you instead of connecting.</p></div>
+              </li>
+              <li>
+                <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-shield"/></svg>
+                <div><h3>Your PC decides who can pair</h3><p>A phone can control the PC only after you open a short pairing window on it. The window closes by itself as soon as one phone has paired.</p></div>
+              </li>
+              <li>
+                <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-cloud-off"/></svg>
+                <div><h3>Nothing leaves your network</h3><p>No account, no cloud, no analytics, no ads. Telepad talks to your PC and to nothing else.</p></div>
+              </li>
+            </ul>
+            <a class="link-arrow" href="https://github.com/omsingh02/telepad/blob/main/SECURITY.md">Read the security model <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-arrow"/></svg></a>
+            <p class="fine">It also lists what Telepad does not protect against.</p>
+          </div>
+
+          <div class="security-art" role="img" aria-label="Two devices showing the same fingerprint code, 7F2A B9C1 4E08 91D3 0AC7, with a check mark between them.">
+            <div class="fp-card">
+              <span class="fp-label"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-phone"/></svg> Your phone</span>
+              <code>7F2A · B9C1<br>4E08 · 91D3<br>0AC7</code>
+            </div>
+            <div class="fp-match">
+              <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-check"/></svg>
+              <span>They match</span>
+            </div>
+            <div class="fp-card">
+              <span class="fp-label"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-monitor"/></svg> Your PC</span>
+              <code>7F2A · B9C1<br>4E08 · 91D3<br>0AC7</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download -->
+    <section class="section" id="download">
+      <div class="wrap">
+        <header class="section-head reveal">
+          <p class="kicker">Download</p>
+          <h2>Get Telepad.</h2>
+          <p>Two small pieces: the app for your phone and Telepad for your computer. Bluetooth mode needs only the app. This is an alpha: it works, but it is new, so expect rough edges, and please tell us what you find.</p>
+        </header>
+
+        <div class="downloads">
+          <article class="dl reveal" data-os="android">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-phone"/></svg></span>
+            <h3>Android app</h3>
+            <p class="dl-meta">Android 9 or later · APK</p>
+            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad/releases/latest/download/telepad-android.apk"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download APK</a>
+            <p class="dl-note">Allow installs from your browser when Android asks.</p>
+          </article>
+          <article class="dl reveal" data-os="windows">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-monitor"/></svg></span>
+            <h3>Windows</h3>
+            <p class="dl-meta">Windows 10 and 11 · 64-bit · one .exe</p>
+            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad/releases/latest/download/telepad-server-windows-x86_64.exe"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download .exe</a>
+            <p class="dl-note">Allow UDP port 5000 in the firewall if asked.</p>
+          </article>
+          <article class="dl reveal" data-os="linux">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-terminal"/></svg></span>
+            <h3>Linux</h3>
+            <p class="dl-meta">x86_64 · glibc 2.35+ · .tar.gz</p>
+            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad/releases/latest/download/telepad-server-linux-x86_64.tar.gz"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download .tar.gz</a>
+            <p class="dl-note">Needs access to <code>/dev/uinput</code>. <a href="https://github.com/omsingh02/telepad#linux">One-time setup</a>.</p>
+          </article>
+          <article class="dl reveal" data-os="macos">
+            <span class="badge"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-laptop"/></svg></span>
+            <h3>macOS</h3>
+            <p class="dl-meta">Apple silicon and Intel · .tar.gz</p>
+            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad/releases/latest/download/telepad-server-macos-universal.tar.gz"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download .tar.gz</a>
+            <p class="dl-note">Not notarized yet. <a href="https://github.com/omsingh02/telepad#macos">How to open it</a>.</p>
+          </article>
+        </div>
+
+        <p class="dl-foot reveal">
+          Every file is listed with its SHA-256 in <a href="https://github.com/omsingh02/telepad/releases/latest/download/SHA256SUMS">SHA256SUMS</a>.
+          Prefer to build it yourself? <a href="https://github.com/omsingh02/telepad#building-from-source">Build from source</a> or see <a href="https://github.com/omsingh02/telepad/releases">all releases</a>.
+        </p>
+      </div>
+    </section>
+
+    <!-- Open source -->
+    <section class="section" id="open">
+      <div class="wrap">
+        <div class="open reveal">
+          <div>
+            <p class="kicker">Open source</p>
+            <h2>Built in the open, all the way down.</h2>
+            <p class="lead">MIT licensed. The app is Kotlin and Jetpack Compose, the desktop app is Rust, and both live in one repository. The app’s networking tests run a real encrypted handshake against a stand-in PC that speaks the real protocol, and every screen is rendered by a test.</p>
+            <ul class="chips" aria-label="Built with">
+              <li>Rust</li><li>Tokio</li><li>Noise</li><li>Kotlin</li><li>Jetpack Compose</li><li>Material 3</li>
+            </ul>
+          </div>
+          <div class="open-actions">
+            <a class="btn btn-primary" href="https://github.com/omsingh02/telepad"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-code"/></svg> View the source</a>
+            <a class="btn btn-secondary" href="https://github.com/omsingh02/telepad/blob/main/CONTRIBUTING.md"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-layers"/></svg> How to contribute</a>
+            <a class="btn btn-secondary" href="https://github.com/omsingh02/telepad/issues/new/choose"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-sparkle"/></svg> Report a bug or share an idea</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section" id="faq">
+      <div class="wrap narrow">
+        <header class="section-head reveal">
+          <p class="kicker">FAQ</p>
+          <h2>Questions, answered.</h2>
+        </header>
+        <div class="faq reveal">
+          <details>
+            <summary>Do I need to install something on my PC? <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-chevron"/></svg></summary>
+            <p>For Wi‑Fi mode, yes: Telepad for your computer, a single small file with no installer and no dependencies. Bluetooth mode needs nothing on the PC. Your phone shows up as a Bluetooth keyboard and mouse.</p>
+          </details>
+          <details>
+            <summary>Does it work away from home? <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-chevron"/></svg></summary>
+            <p>Telepad is made for a trusted local network: your phone and your PC on the same Wi‑Fi, or paired over Bluetooth. It is not meant to be reachable from the internet, and you should not forward its port.</p>
+          </details>
+          <details>
+            <summary>What happens to what I type? <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-chevron"/></svg></summary>
+            <p>It goes straight to your PC, encrypted. There is no server in between, and nothing is sent to the developers or anyone else. The app has no analytics, ads or accounts.</p>
+          </details>
+          <details>
+            <summary>Is it safe on a network I don’t control? <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-chevron"/></svg></summary>
+            <p>Once a phone is paired, other devices on the network can’t type on your PC, and they can’t read what you send. Do your first pairing on a network you trust, because that is the moment your PC lets a new phone in. Some public networks stop devices from seeing each other. Bluetooth works there.</p>
+          </details>
+          <details>
+            <summary>Which systems does it support? <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-chevron"/></svg></summary>
+            <p>The phone must run Android 9 or later. The PC can run Windows 10 or 11, Linux (X11 and Wayland, through the kernel’s <code>uinput</code>) or macOS 11 and later. The Windows and macOS versions are built and tested on every change, but have had less hands-on testing than Linux, so please tell us if anything is odd.</p>
+          </details>
+          <details>
+            <summary>Is there an iPhone version? <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-chevron"/></svg></summary>
+            <p>Not at the moment. Telepad is Android only.</p>
+          </details>
+          <details>
+            <summary>Is it on Google Play or F-Droid? <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-chevron"/></svg></summary>
+            <p>Not yet. Download the signed APK from the GitHub releases. Every file is listed with its checksum.</p>
+          </details>
+          <details>
+            <summary>How can I help? <svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-chevron"/></svg></summary>
+            <p>Try it and tell us what you find. Bug reports, ideas, translations and patches are all welcome, and the <a href="https://github.com/omsingh02/telepad/blob/main/CONTRIBUTING.md">contributing guide</a> explains how to build and test both halves.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Final call -->
+    <section class="final">
+      <div class="wrap final-box reveal">
+        <h2>Put a trackpad in your pocket.</h2>
+        <p>Free, open source and private. Set up in about a minute.</p>
+        <div class="cta-row cta-center">
+          <a class="btn btn-primary btn-large" href="#download"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-download"/></svg> Download</a>
+          <a class="btn btn-secondary btn-large" href="https://github.com/omsingh02/telepad"><svg class="ic" aria-hidden="true"><use href="assets/img/icons.svg#i-star"/></svg> Star on GitHub</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap foot">
+      <div class="foot-brand">
+        <picture>
+          <source srcset="assets/img/logo-dark.svg" media="(prefers-color-scheme: dark)">
+          <img src="assets/img/logo.svg" width="136" height="34" alt="Telepad" loading="lazy">
+        </picture>
+        <p>Your phone as a trackpad and keyboard for your computer.</p>
+      </div>
+      <nav class="foot-links" aria-label="Project">
+        <h2>Project</h2>
+        <a href="https://github.com/omsingh02/telepad">GitHub</a>
+        <a href="https://github.com/omsingh02/telepad/releases">Releases</a>
+        <a href="https://github.com/omsingh02/telepad/blob/main/CHANGELOG.md">Changelog</a>
+        <a href="https://github.com/omsingh02/telepad/blob/main/CONTRIBUTING.md">Contributing</a>
+      </nav>
+      <nav class="foot-links" aria-label="Help">
+        <h2>Help</h2>
+        <a href="https://github.com/omsingh02/telepad#troubleshooting">Troubleshooting</a>
+        <a href="https://github.com/omsingh02/telepad/issues/new/choose">Report a problem</a>
+        <a href="https://github.com/omsingh02/telepad/blob/main/SECURITY.md">Security policy</a>
+        <a href="https://github.com/omsingh02/telepad/blob/main/LICENSE">MIT license</a>
+      </nav>
+    </div>
+    <div class="wrap foot-legal">
+      <p>© 2026 Om Singh and Telepad contributors. This site uses no cookies, analytics or third-party scripts.</p>
+    </div>
+  </footer>
+
+  <script src="assets/site.js" defer></script>
+</body>
+</html>
