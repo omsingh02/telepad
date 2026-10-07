@@ -1,29 +1,33 @@
 package com.omsingh.telepad.ui.screens.remote
 
-import android.os.SystemClock
+import android.content.res.Configuration
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowDownward
-import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.Computer
+import androidx.compose.material.icons.automirrored.rounded.HelpOutline
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Redo
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Save
@@ -34,75 +38,90 @@ import androidx.compose.material.icons.rounded.Tab
 import androidx.compose.material.icons.rounded.Undo
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.omsingh.telepad.R
-import com.omsingh.telepad.core.host.HostProfile
 import com.omsingh.telepad.core.host.ShortcutId
-import com.omsingh.telepad.core.input.HidKeyCodes
 import com.omsingh.telepad.core.input.KeyboardSession
-import com.omsingh.telepad.core.input.ModifierKey
-import com.omsingh.telepad.core.input.ModifierState
-import com.omsingh.telepad.core.input.TextDiff
-import com.omsingh.telepad.ui.components.KeyCap
-import com.omsingh.telepad.ui.components.ModifierKeyCap
+import com.omsingh.telepad.core.input.TypingBridge
 import com.omsingh.telepad.ui.components.SectionHeader
 import com.omsingh.telepad.ui.theme.Haptics
 import com.omsingh.telepad.ui.theme.Spacing
 
-/** The most text kept in the field. Older text is dropped from the field (never from the PC). */
-private const val MAX_BUFFER = 400
-private const val KEEP_AFTER_TRIM = 120
+/**
+ * What the person chose about the keyboard, kept above the tab so that switching to the Pad and
+ * back does not undo it.
+ */
+@Stable
+class KeyboardUiState(chosenPcLayout: Boolean? = null, live: Boolean = false, hidden: Boolean = false) {
+    /** The layout picked from the menu, or null to let the way the phone is held decide. */
+    var chosenPcLayout by mutableStateOf(chosenPcLayout)
+
+    /** Send every key at once, with no suggestions from the phone's keyboard. */
+    var live by mutableStateOf(live)
+
+    /** Mask what is typed, for a password. */
+    var hidden by mutableStateOf(hidden)
+
+    companion object {
+        val Saver = listSaver<KeyboardUiState, Any?>(
+            save = { listOf(it.chosenPcLayout, it.live, it.hidden) },
+            restore = { KeyboardUiState(it[0] as Boolean?, it[1] as Boolean, it[2] as Boolean) },
+        )
+    }
+}
+
+@Composable
+fun rememberKeyboardUiState(): KeyboardUiState = rememberSaveable(saver = KeyboardUiState.Saver) { KeyboardUiState() }
+
+/** Below this much room the keys and shortcuts are made smaller to fit. */
+private val ShortScreen = 560.dp
 
 /**
- * A keyboard for the PC: a field whose every edit is sent as it is made, the keys a phone
- * keyboard lacks (Esc, Tab, Ctrl, arrows...), and shortcuts named and shaped for the PC's OS.
+ * Typing and keys for the PC.
  *
- * Whatever the phone's keyboard does to the text (autocorrect, suggestions, deleting a word)
- * is turned into the exact Backspaces and typing that give the PC the same result
- * ([TextDiff]).
+ * You type with your phone's own keyboard, so autocorrect, swipe typing, voice and every language
+ * work, and what you type is sent to the PC ([TypingBridge]). The keys a phone keyboard lacks sit
+ * right above it ([KeyBar]): Esc, Tab, the modifiers, arrows. Shortcuts named for the PC's own
+ * operating system fill the rest of the room.
+ *
+ * Keybinds that need every key of a real keyboard are on the PC keyboard ([KeyGrid]), which
+ * is what a phone held sideways shows, since its own keyboard would fill the screen.
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun KeyboardTab(
     state: RemoteUiState,
@@ -110,127 +129,257 @@ fun KeyboardTab(
     keyboard: KeyboardSession,
     haptics: Haptics,
     modifier: Modifier = Modifier,
+    ui: KeyboardUiState = rememberKeyboardUiState(),
 ) {
     val host = state.host
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(Spacing.md),
-    ) {
-        state.pcClipboard?.let { text ->
-            PcClipboardCard(text, onCopy = actions::copyPcClipboardToPhone, onDismiss = actions::dismissPcClipboard)
+    // A choice from the menu wins. Without one, the way the phone is held decides (the screen forgets
+    // the choice when the phone is turned).
+    val pcLayout = ui.chosenPcLayout ?: landscape
+    var openPhoneKeyboard by remember { mutableStateOf(false) }
+
+    var field by remember { mutableStateOf(TextFieldValue("")) }
+    var live by ui::live
+    var hidden by ui::hidden
+    var help by remember { mutableStateOf(false) }
+
+    val bridge = remember(keyboard) { TypingBridge(keyboard) }
+    val focus = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
+    // Text typed so far must reach the PC before a key from the bar, or the key arrives ahead of it.
+    val beforeKey: () -> Unit = { bridge.flush(field.text) }
+
+    val onFieldChange: (TextFieldValue) -> Unit = { new ->
+        val composition = new.composition?.let { TypingBridge.Composition(it.start, it.end) }
+        val replacement = bridge.update(new.text, composition)
+        field = if (replacement == null) new else TextFieldValue(replacement, TextRange(replacement.length))
+    }
+
+    val showPcKeyboard = {
+        bridge.flush(field.text)
+        keyboardController?.hide()
+        focusManager.clearFocus()
+        ui.chosenPcLayout = true
+    }
+    val showPhoneKeyboard = {
+        ui.chosenPcLayout = false
+        openPhoneKeyboard = true
+    }
+    LaunchedEffect(pcLayout, openPhoneKeyboard) {
+        if (!pcLayout && openPhoneKeyboard) {
+            openPhoneKeyboard = false
+            runCatching { focus.requestFocus() }
+            keyboardController?.show()
         }
+    }
 
-        // The keyboard comes first: shortcuts and keybinds are what it is for. The text field
-        // below it opens the phone's own keyboard only when it is touched.
-        SectionHeader(stringResource(R.string.keys_section_keys), horizontalPadding = 0.dp)
-        KeyGrid(host, keyboard, haptics)
-
-        SectionHeader(stringResource(R.string.keys_section_text), horizontalPadding = 0.dp)
-        TypingField(keyboard)
-
-        if (!state.overWifi) {
-            Text(
-                stringResource(R.string.keys_bt_limits),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    // The shortcuts: the same list wherever there is room for it.
+    val shortcuts = buildList {
+        if (state.clipboardAvailable) {
+            add(ShortcutItem(Icons.Rounded.ContentPaste, stringResource(R.string.keys_paste_phone), null) {
+                beforeKey()
+                actions.pasteFromPhone()
+            })
+            add(ShortcutItem(Icons.Rounded.ContentCopy, stringResource(R.string.keys_copy_pc), null) {
+                beforeKey()
+                actions.copyFromPc()
+            })
         }
+        for (id in ShortcutId.values()) {
+            val chord = host.chord(id)
+            add(ShortcutItem(iconFor(id), labelFor(id), host.describe(chord)) {
+                beforeKey()
+                keyboard.shortcut(chord)
+            })
+        }
+    }
 
-        SectionHeader(stringResource(R.string.keys_section_shortcuts), horizontalPadding = 0.dp)
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            // Each chip already has a 48dp touch target around its 32dp body.
-            verticalArrangement = Arrangement.spacedBy(0.dp),
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val short = maxHeight < ShortScreen
+        // A phone held sideways has no room for a section of shortcuts beside the whole keyboard:
+        // they go in the row above it instead, where the width is.
+        val shortcutsAboveKeys = pcLayout && short
+
+        Column(
+            Modifier
+                .fillMaxSize()
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
-            if (state.clipboardAvailable) {
-                ShortcutChip(Icons.Rounded.ContentPaste, stringResource(R.string.keys_paste_phone), null, haptics, actions::pasteFromPhone)
-                ShortcutChip(Icons.Rounded.ContentCopy, stringResource(R.string.keys_copy_pc), null, haptics, actions::copyFromPc)
+            if (shortcutsAboveKeys) {
+                state.pcClipboard?.let { text ->
+                    PcClipboardCard(text, onCopy = actions::copyPcClipboardToPhone, onDismiss = actions::dismissPcClipboard)
+                }
+                Spacer(Modifier.weight(1f))
+            } else {
+                // The shortcuts take whatever room the keyboard leaves.
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md),
+                ) {
+                    state.pcClipboard?.let { text ->
+                        PcClipboardCard(text, onCopy = actions::copyPcClipboardToPhone, onDismiss = actions::dismissPcClipboard)
+                    }
+
+                    if (short) {
+                        // One row to slide along: there is no room for the section.
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) { for (item in shortcuts) ShortcutChip(item, haptics) }
+                    } else {
+                        SectionHeader(stringResource(R.string.keys_section_shortcuts), horizontalPadding = 0.dp)
+                        FlowRow(
+                            maxItemsInEachRow = 2,
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                            // Each chip already has a 48dp touch target around its 32dp body.
+                            verticalArrangement = Arrangement.spacedBy(0.dp),
+                        ) { for (item in shortcuts) ShortcutChip(item, haptics, Modifier.weight(1f)) }
+                    }
+
+                    if (!state.overWifi) {
+                        Text(
+                            stringResource(R.string.keys_bt_limits),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
-            for (id in ShortcutId.values()) {
-                val chord = host.chord(id)
-                ShortcutChip(iconFor(id), labelFor(id), host.describe(chord), haptics) { keyboard.shortcut(chord) }
+
+            if (pcLayout) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = showPhoneKeyboard) {
+                        Icon(Icons.Rounded.Keyboard, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(stringResource(R.string.keys_menu_phone_layout), modifier = Modifier.padding(start = Spacing.sm))
+                    }
+                    if (shortcutsAboveKeys) {
+                        Row(
+                            Modifier
+                                .weight(1f)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) { for (item in shortcuts) ShortcutChip(item, haptics) }
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                    IconButton(onClick = { help = true }) {
+                        Icon(Icons.AutoMirrored.Rounded.HelpOutline, contentDescription = stringResource(R.string.keys_menu_help))
+                    }
+                }
+                KeyGrid(host, keyboard, haptics, compact = short || landscape)
+            } else {
+                TypingField(
+                    value = field,
+                    onValueChange = onFieldChange,
+                    live = live,
+                    hidden = hidden,
+                    onBackspaceWithNothingToDelete = bridge::backspaceWithNothingToDelete,
+                    focusRequester = focus,
+                    trailing = {
+                        IconButton(onClick = { hidden = !hidden }, modifier = Modifier.size(44.dp)) {
+                            Icon(
+                                if (hidden) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                contentDescription = stringResource(if (hidden) R.string.keys_show_text else R.string.keys_hide_text),
+                            )
+                        }
+                        if (field.text.isNotEmpty()) {
+                            IconButton(
+                                onClick = {
+                                    field = TextFieldValue("")
+                                    bridge.reset()
+                                },
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.keys_clear))
+                            }
+                        }
+                        FieldMenu(
+                            live = live,
+                            onPcKeyboard = showPcKeyboard,
+                            onToggleLive = {
+                                bridge.flush(field.text)
+                                live = !live
+                            },
+                            onHelp = { help = true },
+                        )
+                    },
+                )
+                KeyBar(host, keyboard, haptics, beforeKey)
             }
+        }
+    }
+
+    if (help) KeyHelpSheet(onDismiss = { help = false })
+}
+
+/** The options for typing, behind one button so that the line has room for what is typed. */
+@Composable
+private fun FieldMenu(live: Boolean, onPcKeyboard: () -> Unit, onToggleLive: () -> Unit, onHelp: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }, modifier = Modifier.size(44.dp)) {
+            Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.keys_more))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.keys_menu_pc_layout)) },
+                leadingIcon = { Icon(Icons.Rounded.Computer, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onPcKeyboard()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.keys_menu_live)) },
+                trailingIcon = { if (live) Icon(Icons.Rounded.Check, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onToggleLive()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.keys_menu_help)) },
+                leadingIcon = { Icon(Icons.AutoMirrored.Rounded.HelpOutline, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onHelp()
+                },
+            )
         }
     }
 }
 
-// ── The field ────────────────────────────────────────────────────────
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TypingField(keyboard: KeyboardSession) {
-    var value by remember { mutableStateOf(TextFieldValue("")) }
-    var hidden by rememberSaveable { mutableStateOf(false) }
-    val focus = remember { FocusRequester() }
-    val description = stringResource(R.string.keys_field_description)
-
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Box(Modifier.padding(Spacing.lg)) {
-            if (value.text.isEmpty()) {
-                Text(
-                    stringResource(R.string.keys_placeholder),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            BasicTextField(
-                value = value,
-                onValueChange = { new ->
-                    val edit = TextDiff.diff(value.text, new.text)
-                    if (!edit.isEmpty) {
-                        keyboard.backspace(edit.backspaces)
-                        keyboard.type(edit.insert)
-                    }
-                    value = if (new.text.length > MAX_BUFFER && new.composition == null) {
-                        val tail = new.text.takeLast(KEEP_AFTER_TRIM)
-                        TextFieldValue(tail, TextRange(tail.length))
-                    } else {
-                        new
-                    }
-                },
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                visualTransformation = if (hidden) PasswordVisualTransformation() else VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = !hidden,
-                    keyboardType = if (hidden) KeyboardType.Password else KeyboardType.Text,
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 96.dp)
-                    .padding(end = 72.dp)
-                    .focusRequester(focus)
-                    .semantics { contentDescription = description }
-                    // A phone keyboard sends Backspace as a key event when there is nothing to delete,
-                    // and the PC may well have something there.
-                    .onPreviewKeyEvent { event ->
-                        if (event.key == Key.Backspace && event.type == KeyEventType.KeyDown && value.text.isEmpty()) {
-                            keyboard.backspace(1)
-                            true
-                        } else {
-                            false
-                        }
-                    },
-            )
-            Row(Modifier.align(Alignment.TopEnd)) {
-                IconButton(onClick = { hidden = !hidden }, modifier = Modifier.size(40.dp)) {
-                    Icon(
-                        if (hidden) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                        contentDescription = stringResource(if (hidden) R.string.keys_show_text else R.string.keys_hide_text),
-                    )
-                }
-                if (value.text.isNotEmpty()) {
-                    IconButton(onClick = { value = TextFieldValue("") }, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.keys_clear))
-                    }
-                }
+private fun KeyHelpSheet(onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(horizontal = Spacing.xl)
+                .padding(bottom = Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        ) {
+            Text(stringResource(R.string.keys_help_title), style = MaterialTheme.typography.headlineSmall)
+            for (line in listOf(
+                R.string.keys_help_type,
+                R.string.keys_help_chord,
+                R.string.keys_help_lock,
+                R.string.keys_help_hold,
+                R.string.keys_help_fn,
+                R.string.keys_help_pc,
+            )) {
+                Text(stringResource(line), style = MaterialTheme.typography.bodyLarge)
             }
         }
     }
@@ -238,24 +387,28 @@ private fun TypingField(keyboard: KeyboardSession) {
 
 // ── Shortcuts and clipboard ──────────────────────────────────────────
 
+/** A shortcut: what to call it, which key combination it is on this PC, and what to do. */
+private class ShortcutItem(val icon: ImageVector, val label: String, val hint: String?, val onClick: () -> Unit)
+
 @Composable
-private fun ShortcutChip(icon: ImageVector, label: String, hint: String?, haptics: Haptics, onClick: () -> Unit) {
+private fun ShortcutChip(item: ShortcutItem, haptics: Haptics, modifier: Modifier = Modifier) {
     AssistChip(
         colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         border = null,
+        modifier = modifier,
         onClick = {
             haptics.key()
-            onClick()
+            item.onClick()
         },
         label = {
             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                Text(label)
-                if (hint != null) {
-                    Text(hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(item.label)
+                if (item.hint != null) {
+                    Text(item.hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         },
-        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+        leadingIcon = { Icon(item.icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
     )
 }
 

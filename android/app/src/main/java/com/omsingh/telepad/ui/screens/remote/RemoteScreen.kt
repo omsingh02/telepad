@@ -27,7 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.HelpOutline
+import androidx.compose.material.icons.automirrored.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Mouse
 import androidx.compose.material.icons.rounded.PlayCircle
@@ -140,6 +140,7 @@ fun RemoteScreen(
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     var mode by rememberSaveable { mutableStateOf(RemoteMode.PAD) }
+    val keyboardUi = rememberKeyboardUiState()
     var details by remember { mutableStateOf(false) }
     var gestures by remember { mutableStateOf(false) }
     val haptics = rememberHaptics(state.preferences.hapticFeedback)
@@ -166,11 +167,15 @@ fun RemoteScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
         ) {
             val landscape = maxWidth > maxHeight
+            // Turning the phone changes which keyboard fits it, so a choice made before the turn is forgotten.
+            // This is here, not in the Keys tab, which is rebuilt every time it is opened.
+            LaunchedEffect(landscape) { keyboardUi.chosenPcLayout = null }
             val content: @Composable (Modifier) -> Unit = { contentModifier ->
                 RemoteContent(
                     state = state,
                     actions = actions,
                     keyboard = keyboard,
+                    keyboardUi = keyboardUi,
                     mode = mode,
                     haptics = haptics,
                     modifier = contentModifier,
@@ -218,7 +223,7 @@ fun RemoteScreen(
                         }
                         if (mode == RemoteMode.PAD && state.connected) {
                             IconButton(onClick = { gestures = true }) {
-                                Icon(Icons.Rounded.HelpOutline, contentDescription = stringResource(R.string.pad_gestures_title))
+                                Icon(Icons.AutoMirrored.Rounded.HelpOutline, contentDescription = stringResource(R.string.pad_gestures_title))
                             }
                         }
                     }
@@ -238,20 +243,30 @@ private fun RemoteContent(
     state: RemoteUiState,
     actions: RemoteActions,
     keyboard: KeyboardSession,
+    keyboardUi: KeyboardUiState,
     mode: RemoteMode,
     haptics: com.omsingh.telepad.ui.theme.Haptics,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier) {
-        AnimatedContent(
-            targetState = mode,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "remoteMode",
-        ) { current ->
-            when (current) {
-                RemoteMode.PAD -> TouchpadTab(state, actions, haptics)
-                RemoteMode.KEYS -> KeyboardTab(state, actions, keyboard, haptics)
-                RemoteMode.MEDIA -> MediaTab(state, actions, haptics)
+        Column(Modifier.fillMaxSize()) {
+            // The Keys tab shows its modifiers itself. Anywhere else, one that is still on has to be
+            // seen, and it takes its own room rather than covering a control.
+            if (mode != RemoteMode.KEYS) {
+                ModifierHud(state.host, keyboard, Modifier.align(Alignment.CenterHorizontally).padding(bottom = Spacing.sm))
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                AnimatedContent(
+                    targetState = mode,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "remoteMode",
+                ) { current ->
+                    when (current) {
+                        RemoteMode.PAD -> TouchpadTab(state, actions, haptics)
+                        RemoteMode.KEYS -> KeyboardTab(state, actions, keyboard, haptics, ui = keyboardUi)
+                        RemoteMode.MEDIA -> MediaTab(state, actions, haptics)
+                    }
+                }
             }
         }
         AnimatedVisibility(

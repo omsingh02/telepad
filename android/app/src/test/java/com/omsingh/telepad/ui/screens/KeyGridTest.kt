@@ -6,6 +6,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performClick
 import com.omsingh.telepad.R
 import com.omsingh.telepad.core.host.HostOs
@@ -88,13 +89,20 @@ class KeyGridTest {
     }
 
     @Test
-    fun `the chord line names what is on`() {
+    fun `a touch at the very edge of a key still presses it`() {
         compose.show { Grid() }
-        compose.onNodeWithText(string(R.string.keys_chord_hint)).assertExists()
-
-        compose.onNodeWithContentDescription(superKey).performClick()
-        compose.settle()
-        compose.onNodeWithText(string(R.string.keys_chord_active, host.meta.symbol)).assertExists()
+        // The key's touch area is its whole cell, gap included, so a finger between two keys never hits nothing.
+        compose.onNodeWithContentDescription("q").performTouchInput {
+            down(androidx.compose.ui.geometry.Offset(1f, height / 2f))
+            up()
+        }
+        assertEquals(
+            listOf(
+                InputEvent.KeyPress(HidKeyCodes.Q, InputEvent.Modifiers()),
+                InputEvent.KeyRelease(HidKeyCodes.Q, InputEvent.Modifiers()),
+            ),
+            sent,
+        )
     }
 
     @Test

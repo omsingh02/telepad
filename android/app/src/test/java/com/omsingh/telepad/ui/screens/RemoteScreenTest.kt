@@ -187,6 +187,85 @@ class RemoteScreenTest {
     }
 
     @Test
+    fun `Enter sends the line and the field starts afresh`() {
+        show(Fixtures.remote())
+        openTab(R.string.remote_mode_keys)
+        typingField.performTextInput("ls\n")
+        assertEquals(listOf<InputEvent>(InputEvent.TextInput("ls\n")), sent)
+        compose.settle() // the field empties itself
+
+        // Nothing is left in the field to be compared with the next line.
+        sent.clear()
+        typingField.performTextInput("a")
+        assertEquals(listOf<InputEvent>(InputEvent.TextInput("a")), sent)
+    }
+
+    @Test
+    fun `the bar above the phone's keyboard sends keys and takes part in chords`() {
+        show(Fixtures.remote(os = HostOs.LINUX))
+        openTab(R.string.remote_mode_keys)
+
+        compose.onNodeWithContentDescription("Tab").performClick()
+        assertEquals(tap(HidKeyCodes.TAB), sent)
+
+        // Super, then a letter typed on the phone's own keyboard: Super+Q.
+        sent.clear()
+        compose.onNodeWithContentDescription("Super").performClick()
+        compose.settle()
+        typingField.performTextInput("q")
+        assertEquals(tap(HidKeyCodes.Q, InputEvent.Modifiers(leftMeta = true)), sent)
+    }
+
+    @Test
+    fun `the PC keyboard replaces the phone's keyboard and can be left again`() {
+        show(Fixtures.remote())
+        openTab(R.string.remote_mode_keys)
+        compose.onNodeWithContentDescription("q").assertDoesNotExist()
+
+        compose.onNodeWithContentDescription(string(R.string.keys_more)).performClick()
+        compose.settle()
+        compose.onNodeWithText(string(R.string.keys_menu_pc_layout)).performClick()
+        compose.settle()
+        compose.onNodeWithContentDescription("q").assertExists()
+        typingField.assertDoesNotExist()
+
+        compose.onNodeWithText(string(R.string.keys_menu_phone_layout)).performClick()
+        compose.settle()
+        typingField.assertExists()
+        compose.onNodeWithContentDescription("q").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the keyboard chosen stays chosen when the tabs are switched`() {
+        show(Fixtures.remote())
+        openTab(R.string.remote_mode_keys)
+        compose.onNodeWithContentDescription(string(R.string.keys_more)).performClick()
+        compose.settle()
+        compose.onNodeWithText(string(R.string.keys_menu_pc_layout)).performClick()
+        compose.settle()
+
+        openTab(R.string.remote_mode_pad)
+        openTab(R.string.remote_mode_keys)
+        compose.onNodeWithContentDescription("q").assertExists()
+    }
+
+    @Test
+    fun `a modifier that is still on is shown on the other tabs, and one tap lets go`() {
+        show(Fixtures.remote(os = HostOs.LINUX))
+        openTab(R.string.remote_mode_keys)
+        compose.onNodeWithContentDescription("Control").performClick()
+        compose.settle()
+
+        openTab(R.string.remote_mode_pad)
+        compose.onNodeWithText(string(R.string.keys_chord_active, "Ctrl")).assertIsDisplayed()
+
+        compose.onNodeWithContentDescription(string(R.string.keys_release_modifiers)).performClick()
+        compose.settle()
+        compose.onNodeWithText(string(R.string.keys_chord_active, "Ctrl")).assertDoesNotExist()
+        assertTrue(!keyboard.hasModifiers)
+    }
+
+    @Test
     fun `the shortcut chips send the keys of the PC's own operating system`() {
         show(Fixtures.remote(os = HostOs.WINDOWS))
         openTab(R.string.remote_mode_keys)
