@@ -21,6 +21,10 @@ trap cleanup EXIT
 
 cargo about generate --locked about.hbs -o "$work/THIRD_PARTY_LICENSES.md"
 
+# cargo-about lists the libraries under each license in an order that can differ from one run to the next, which
+# would make --check fail on a file that is right: sorted, the same Cargo.lock gives the same file anywhere.
+python3 scripts/sort-license-users.py "$work/THIRD_PARTY_LICENSES.md"
+
 if [ "${1:-}" = "--check" ]; then
   if cmp -s "$work/THIRD_PARTY_LICENSES.md" THIRD_PARTY_LICENSES.md; then
     echo "THIRD_PARTY_LICENSES.md is up to date."

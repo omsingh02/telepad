@@ -767,10 +767,10 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- core-foundation-sys 0.8.7 ([https://github.com/servo/core-foundation-rs](https://github.com/servo/core-foundation-rs))
 - core-foundation 0.10.1 ([https://github.com/servo/core-foundation-rs](https://github.com/servo/core-foundation-rs))
-- core-graphics-types 0.2.0 ([https://github.com/servo/core-foundation-rs](https://github.com/servo/core-foundation-rs))
+- core-foundation-sys 0.8.7 ([https://github.com/servo/core-foundation-rs](https://github.com/servo/core-foundation-rs))
 - core-graphics 0.25.0 ([https://github.com/servo/core-foundation-rs](https://github.com/servo/core-foundation-rs))
+- core-graphics-types 0.2.0 ([https://github.com/servo/core-foundation-rs](https://github.com/servo/core-foundation-rs))
 
 <a id="MIT"></a>
 ```text
@@ -1929,9 +1929,9 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
+- foreign-types 0.5.0 ([https://github.com/sfackler/foreign-types](https://github.com/sfackler/foreign-types))
 - foreign-types-macros 0.2.4 ([https://github.com/sfackler/foreign-types](https://github.com/sfackler/foreign-types))
 - foreign-types-shared 0.3.1 ([https://github.com/sfackler/foreign-types](https://github.com/sfackler/foreign-types))
-- foreign-types 0.5.0 ([https://github.com/sfackler/foreign-types](https://github.com/sfackler/foreign-types))
 
 <a id="MIT"></a>
 ```text
@@ -2177,8 +2177,8 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- dirs-sys 0.5.0 ([https://github.com/dirs-dev/dirs-sys-rs](https://github.com/dirs-dev/dirs-sys-rs))
 - dirs 7.0.0 ([https://codeberg.org/dirs/dirs-rs](https://codeberg.org/dirs/dirs-rs))
+- dirs-sys 0.5.0 ([https://github.com/dirs-dev/dirs-sys-rs](https://github.com/dirs-dev/dirs-sys-rs))
 
 <a id="MIT"></a>
 ```text
@@ -2633,11 +2633,11 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
+- tracing 0.1.44 ([https://github.com/tokio-rs/tracing](https://github.com/tokio-rs/tracing))
 - tracing-attributes 0.1.31 ([https://github.com/tokio-rs/tracing](https://github.com/tokio-rs/tracing))
 - tracing-core 0.1.36 ([https://github.com/tokio-rs/tracing](https://github.com/tokio-rs/tracing))
 - tracing-log 0.2.0 ([https://github.com/tokio-rs/tracing](https://github.com/tokio-rs/tracing))
 - tracing-subscriber 0.3.23 ([https://github.com/tokio-rs/tracing](https://github.com/tokio-rs/tracing))
-- tracing 0.1.44 ([https://github.com/tokio-rs/tracing](https://github.com/tokio-rs/tracing))
 
 <a id="MIT"></a>
 ```text
@@ -2967,10 +2967,10 @@ DEALINGS IN THE SOFTWARE.
 Used by:
 
 - anstream 1.0.0 ([https://github.com/rust-cli/anstyle.git](https://github.com/rust-cli/anstyle.git))
+- anstyle 1.0.14 ([https://github.com/rust-cli/anstyle.git](https://github.com/rust-cli/anstyle.git))
 - anstyle-parse 1.0.0 ([https://github.com/rust-cli/anstyle.git](https://github.com/rust-cli/anstyle.git))
 - anstyle-query 1.1.5 ([https://github.com/rust-cli/anstyle.git](https://github.com/rust-cli/anstyle.git))
 - anstyle-wincon 3.0.11 ([https://github.com/rust-cli/anstyle.git](https://github.com/rust-cli/anstyle.git))
-- anstyle 1.0.14 ([https://github.com/rust-cli/anstyle.git](https://github.com/rust-cli/anstyle.git))
 - clap 4.6.7 ([https://github.com/clap-rs/clap](https://github.com/clap-rs/clap))
 - clap_builder 4.6.7 ([https://github.com/clap-rs/clap](https://github.com/clap-rs/clap))
 - clap_derive 4.6.7 ([https://github.com/clap-rs/clap](https://github.com/clap-rs/clap))
@@ -3160,8 +3160,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Used by:
 
-- x11rb-protocol 0.13.2 ([https://github.com/psychon/x11rb](https://github.com/psychon/x11rb))
 - x11rb 0.13.2 ([https://github.com/psychon/x11rb](https://github.com/psychon/x11rb))
+- x11rb-protocol 0.13.2 ([https://github.com/psychon/x11rb](https://github.com/psychon/x11rb))
 
 <a id="MIT"></a>
 ```text
@@ -3465,8 +3465,8 @@ SOFTWARE.
 
 Used by:
 
-- proc-macro-error-attr 1.0.4 ([https://gitlab.com/CreepySkeleton/proc-macro-error](https://gitlab.com/CreepySkeleton/proc-macro-error))
 - proc-macro-error 1.0.4 ([https://gitlab.com/CreepySkeleton/proc-macro-error](https://gitlab.com/CreepySkeleton/proc-macro-error))
+- proc-macro-error-attr 1.0.4 ([https://gitlab.com/CreepySkeleton/proc-macro-error](https://gitlab.com/CreepySkeleton/proc-macro-error))
 
 <a id="MIT"></a>
 ```text
@@ -3633,12 +3633,13 @@ Used by:
 - dlopen2 0.8.2 ([https://github.com/OpenByteDev/dlopen2](https://github.com/OpenByteDev/dlopen2))
 - dlopen2_derive 0.4.3 ([https://github.com/OpenByteDev/dlopen2](https://github.com/OpenByteDev/dlopen2))
 - dpi 0.1.2 ([https://github.com/rust-windowing/winit](https://github.com/rust-windowing/winit))
+- objc2 0.6.4 ([https://github.com/madsmtm/objc2](https://github.com/madsmtm/objc2))
 - objc2-app-kit 0.3.2 ([https://github.com/madsmtm/objc2](https://github.com/madsmtm/objc2))
 - objc2-core-foundation 0.3.2 ([https://github.com/madsmtm/objc2](https://github.com/madsmtm/objc2))
 - objc2-core-graphics 0.3.2 ([https://github.com/madsmtm/objc2](https://github.com/madsmtm/objc2))
 - objc2-encode 4.1.0 ([https://github.com/madsmtm/objc2](https://github.com/madsmtm/objc2))
 - objc2-foundation 0.3.2 ([https://github.com/madsmtm/objc2](https://github.com/madsmtm/objc2))
-- objc2 0.6.4 ([https://github.com/madsmtm/objc2](https://github.com/madsmtm/objc2))
+- windows 0.62.2 ([https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs))
 - windows-collections 0.3.2 ([https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs))
 - windows-core 0.62.2 ([https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs))
 - windows-future 0.3.2 ([https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs))
@@ -3655,7 +3656,6 @@ Used by:
 - windows-targets 0.53.5 ([https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs))
 - windows-threading 0.2.1 ([https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs))
 - windows-version 0.1.7 ([https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs))
-- windows 0.62.2 ([https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs))
 - windows_x86_64_gnu 0.52.6 ([https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs))
 - windows_x86_64_gnu 0.53.1 ([https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs))
 - windows_x86_64_msvc 0.52.6 ([https://github.com/microsoft/windows-rs](https://github.com/microsoft/windows-rs))
@@ -3866,8 +3866,8 @@ Used by:
 - curve25519-dalek-derive 0.1.1 ([https://github.com/dalek-cryptography/curve25519-dalek](https://github.com/dalek-cryptography/curve25519-dalek))
 - displaydoc 0.2.7 ([https://github.com/yaahc/displaydoc](https://github.com/yaahc/displaydoc))
 - endi 1.1.1 ([https://github.com/zeenix/endi](https://github.com/zeenix/endi))
-- event-listener-strategy 0.5.4 ([https://github.com/smol-rs/event-listener-strategy](https://github.com/smol-rs/event-listener-strategy))
 - event-listener 5.4.2 ([https://github.com/smol-rs/event-listener](https://github.com/smol-rs/event-listener))
+- event-listener-strategy 0.5.4 ([https://github.com/smol-rs/event-listener-strategy](https://github.com/smol-rs/event-listener-strategy))
 - fastrand 2.5.0 ([https://github.com/smol-rs/fastrand](https://github.com/smol-rs/fastrand))
 - futures-lite 2.6.1 ([https://github.com/smol-rs/futures-lite](https://github.com/smol-rs/futures-lite))
 - itoa 1.0.18 ([https://github.com/dtolnay/itoa](https://github.com/dtolnay/itoa))
@@ -3891,13 +3891,13 @@ Used by:
 - syn 1.0.109 ([https://github.com/dtolnay/syn](https://github.com/dtolnay/syn))
 - syn 2.0.119 ([https://github.com/dtolnay/syn](https://github.com/dtolnay/syn))
 - syn 3.0.6 ([https://github.com/dtolnay/syn](https://github.com/dtolnay/syn))
-- thiserror-impl 1.0.69 ([https://github.com/dtolnay/thiserror](https://github.com/dtolnay/thiserror))
-- thiserror-impl 2.0.20 ([https://github.com/dtolnay/thiserror](https://github.com/dtolnay/thiserror))
 - thiserror 1.0.69 ([https://github.com/dtolnay/thiserror](https://github.com/dtolnay/thiserror))
 - thiserror 2.0.20 ([https://github.com/dtolnay/thiserror](https://github.com/dtolnay/thiserror))
+- thiserror-impl 1.0.69 ([https://github.com/dtolnay/thiserror](https://github.com/dtolnay/thiserror))
+- thiserror-impl 2.0.20 ([https://github.com/dtolnay/thiserror](https://github.com/dtolnay/thiserror))
 - unicode-ident 1.0.26 ([https://github.com/dtolnay/unicode-ident](https://github.com/dtolnay/unicode-ident))
-- x11-dl 2.21.0 ([https://github.com/AltF02/x11-rs.git](https://github.com/AltF02/x11-rs.git))
 - x11 2.21.0 ([https://github.com/AltF02/x11-rs.git](https://github.com/AltF02/x11-rs.git))
+- x11-dl 2.21.0 ([https://github.com/AltF02/x11-rs.git](https://github.com/AltF02/x11-rs.git))
 - zmij 1.0.23 ([https://github.com/dtolnay/zmij](https://github.com/dtolnay/zmij))
 - zvariant_utils 4.2.0 ([https://github.com/z-galaxy/zbus/](https://github.com/z-galaxy/zbus/))
 
@@ -3996,27 +3996,27 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- atk-sys 0.18.2 ([https://github.com/gtk-rs/gtk3-rs](https://github.com/gtk-rs/gtk3-rs))
 - atk 0.18.2 ([https://github.com/gtk-rs/gtk3-rs](https://github.com/gtk-rs/gtk3-rs))
+- atk-sys 0.18.2 ([https://github.com/gtk-rs/gtk3-rs](https://github.com/gtk-rs/gtk3-rs))
 - cairo-rs 0.18.5 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
 - cairo-sys-rs 0.18.2 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
-- gdk-pixbuf-sys 0.18.0 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
-- gdk-pixbuf 0.18.5 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
-- gdk-sys 0.18.2 ([https://github.com/gtk-rs/gtk3-rs](https://github.com/gtk-rs/gtk3-rs))
 - gdk 0.18.2 ([https://github.com/gtk-rs/gtk3-rs](https://github.com/gtk-rs/gtk3-rs))
+- gdk-pixbuf 0.18.5 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
+- gdk-pixbuf-sys 0.18.0 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
+- gdk-sys 0.18.2 ([https://github.com/gtk-rs/gtk3-rs](https://github.com/gtk-rs/gtk3-rs))
 - gdkwayland-sys 0.18.2 ([https://github.com/gtk-rs/gtk3-rs](https://github.com/gtk-rs/gtk3-rs))
 - gdkx11-sys 0.18.2 ([https://github.com/gtk-rs/gtk3-rs](https://github.com/gtk-rs/gtk3-rs))
-- gio-sys 0.18.1 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
 - gio 0.18.4 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
+- gio-sys 0.18.1 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
+- glib 0.18.5 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
 - glib-macros 0.18.5 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
 - glib-sys 0.18.1 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
-- glib 0.18.5 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
 - gobject-sys 0.18.0 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
+- gtk 0.18.2 ([https://github.com/gtk-rs/gtk3-rs](https://github.com/gtk-rs/gtk3-rs))
 - gtk-sys 0.18.2 ([https://github.com/gtk-rs/gtk3-rs](https://github.com/gtk-rs/gtk3-rs))
 - gtk3-macros 0.18.2 ([https://github.com/gtk-rs/gtk3-rs](https://github.com/gtk-rs/gtk3-rs))
-- gtk 0.18.2 ([https://github.com/gtk-rs/gtk3-rs](https://github.com/gtk-rs/gtk3-rs))
-- pango-sys 0.18.0 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
 - pango 0.18.3 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
+- pango-sys 0.18.0 ([https://github.com/gtk-rs/gtk-rs-core](https://github.com/gtk-rs/gtk-rs-core))
 
 <a id="MIT"></a>
 ```text
@@ -4888,13 +4888,13 @@ Used by:
 - potential_utf 0.1.6 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
 - tinystr 0.8.4 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
 - writeable 0.6.4 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
-- yoke-derive 0.8.4 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
 - yoke 0.8.3 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
-- zerofrom-derive 0.1.8 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
+- yoke-derive 0.8.4 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
 - zerofrom 0.1.8 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
+- zerofrom-derive 0.1.8 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
 - zerotrie 0.2.5 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
-- zerovec-derive 0.11.6 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
 - zerovec 0.11.8 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
+- zerovec-derive 0.11.6 ([https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x))
 
 <a id="Unicode-3.0"></a>
 ```text
