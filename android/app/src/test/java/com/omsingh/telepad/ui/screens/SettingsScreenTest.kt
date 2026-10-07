@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.omsingh.telepad.R
 import com.omsingh.telepad.core.trust.PairedDevice
+import com.omsingh.telepad.platform.Links
 import com.omsingh.telepad.settings.AccentColor
 import com.omsingh.telepad.settings.HostOsChoice
 import com.omsingh.telepad.settings.ThemeMode
@@ -241,7 +242,7 @@ class SettingsScreenTest {
         compose.onNodeWithText(string(R.string.action_next)).performClick()
         compose.settle(800)
         compose.onNodeWithText(string(R.string.onboarding_download)).performClick()
-        assertTrue(platform.calls.single().startsWith("open:https://github.com/"))
+        assertEquals(listOf("open:${Links.DOWNLOAD}"), platform.calls)
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllForgetButtons() =

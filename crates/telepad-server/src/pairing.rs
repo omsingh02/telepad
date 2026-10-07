@@ -12,11 +12,14 @@
 //! open for the phone the owner is holding and for no one else.
 
 use std::time::Duration;
-use telepad_crypto::{CryptoError, PairingStore};
+use telepad_crypto::{random_token, secrets_equal, CryptoError, PairingStore, PAIRING_TOKEN_LEN};
 use tokio::time::Instant;
 
 /// How long the window stays open when the owner opens it without saying.
 pub const DEFAULT_PAIRING_WINDOW: Duration = Duration::from_secs(300);
+
+/// How long a pairing invitation (the QR code) stays valid.
+pub const DEFAULT_INVITATION_TTL: Duration = Duration::from_secs(300);
 
 /// How the server decides about devices it has never seen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,10 +53,18 @@ impl Admission {
     }
 }
 
+/// The one-time secret behind a QR code on the PC's screen. Whoever can read the screen holds it,
+/// so it admits one phone, once, and only for a few minutes.
+struct Invitation {
+    token: [u8; PAIRING_TOKEN_LEN],
+    until: Instant,
+}
+
 pub struct Pairing {
     store: PairingStore,
     accept_any: bool,
     window_until: Option<Instant>,
+    invitation: Option<Invitation>,
 }
 
 impl Pairing {
@@ -62,6 +73,7 @@ impl Pairing {
             store,
             accept_any: false,
             window_until: None,
+            invitation: None,
         };
         match mode {
             PairingMode::AcceptAny => pairing.accept_any = true,
@@ -99,15 +111,64 @@ impl Pairing {
         self.accept_any || self.window_remaining(now).is_some()
     }
 
+    /// Makes a pairing invitation: a fresh one-time token, valid for `ttl`, to put in a QR code.
+    /// It replaces any invitation made before it, so only the code now on the screen works.
+    pub fn invite(&mut self, now: Instant, ttl: Duration) -> [u8; PAIRING_TOKEN_LEN] {
+        let token = random_token();
+        self.invitation = Some(Invitation {
+            token,
+            until: now + ttl,
+        });
+        token
+    }
+
+    /// Time left on the current invitation, or `None` if there is none.
+    pub fn invitation_remaining(&self, now: Instant) -> Option<Duration> {
+        self.invitation
+            .as_ref()
+            .map(|invitation| invitation.until.saturating_duration_since(now))
+            .filter(|remaining| !remaining.is_zero())
+    }
+
+    /// Withdraws the invitation, so that its QR code no longer works.
+    pub fn cancel_invitation(&mut self) {
+        self.invitation = None;
+    }
+
+    fn invitation_accepts(&self, token: &[u8], now: Instant) -> bool {
+        match &self.invitation {
+            Some(invitation) if now < invitation.until => secrets_equal(&invitation.token, token),
+            _ => false,
+        }
+    }
+
     /// Decides whether the device with this public key may connect, pairing it
     /// if a window is open. A failure to save the pairing is reported but does
     /// not refuse the device: it can still use this session.
     pub fn admit(&mut self, pubkey: &[u8; 32], now: Instant) -> (Admission, Option<CryptoError>) {
+        self.admit_with_token(pubkey, &[], now)
+    }
+
+    /// Like [`admit`](Self::admit), for a device that also presented `token` in its handshake.
+    ///
+    /// A token that matches the current invitation pairs the device even though no window is
+    /// open (the QR code is the owner's invitation to the phone that scanned it), and is used up
+    /// by doing so. A wrong, old or empty token counts for nothing, and the window rules apply.
+    pub fn admit_with_token(
+        &mut self,
+        pubkey: &[u8; 32],
+        token: &[u8],
+        now: Instant,
+    ) -> (Admission, Option<CryptoError>) {
         if self.store.is_trusted(pubkey) {
             return (Admission::Known, None);
         }
-        if !self.is_open(now) {
+        let invited = self.invitation_accepts(token, now);
+        if !invited && !self.is_open(now) {
             return (Admission::Rejected, None);
+        }
+        if invited {
+            self.invitation = None;
         }
         let save_error = self.store.trust(pubkey).err();
         // The owner opened the window for the phone in their hand, so shut it behind that
@@ -126,6 +187,7 @@ impl Pairing {
     }
 
     pub fn forget_all(&mut self) -> Result<(), CryptoError> {
+        self.invitation = None;
         self.store.forget_all()
     }
 }
@@ -365,6 +427,138 @@ mod tests {
         assert!(
             err.is_some(),
             "the caller needs to know the pairing was not persisted"
+        );
+    }
+
+    // ── Invitations (the QR code) ────────────────────────────────────
+
+    #[test]
+    fn an_invitation_pairs_a_phone_even_with_pairing_closed() {
+        let (mut p, now, _scratch) = pairing(PairingMode::Closed);
+        let token = p.invite(now, 60 * SEC);
+        assert_eq!(
+            p.admit_with_token(&key(1), &token, now).0,
+            Admission::NewlyPaired
+        );
+        assert_eq!(
+            p.admit(&key(1), now).0,
+            Admission::Known,
+            "and it is remembered"
+        );
+    }
+
+    #[test]
+    fn an_invitation_admits_one_phone_only() {
+        let (mut p, now, _scratch) = pairing(PairingMode::Closed);
+        let token = p.invite(now, 60 * SEC);
+        assert_eq!(
+            p.admit_with_token(&key(1), &token, now).0,
+            Admission::NewlyPaired
+        );
+        // The same code, scanned again by someone else, is spent.
+        assert_eq!(
+            p.admit_with_token(&key(2), &token, now).0,
+            Admission::Rejected
+        );
+        assert_eq!(p.paired_count(), 1);
+    }
+
+    #[test]
+    fn a_wrong_empty_or_old_token_counts_for_nothing() {
+        let (mut p, now, _scratch) = pairing(PairingMode::Closed);
+        let token = p.invite(now, 60 * SEC);
+
+        let mut wrong = token;
+        wrong[0] ^= 0xFF;
+        assert_eq!(
+            p.admit_with_token(&key(1), &wrong, now).0,
+            Admission::Rejected
+        );
+        assert_eq!(p.admit_with_token(&key(1), &[], now).0, Admission::Rejected);
+        assert_eq!(
+            p.admit_with_token(&key(1), &token[..8], now).0,
+            Admission::Rejected
+        );
+
+        // The right code still works after the wrong ones: guessing does not spoil it.
+        assert_eq!(
+            p.admit_with_token(&key(1), &token, now).0,
+            Admission::NewlyPaired
+        );
+    }
+
+    #[test]
+    fn an_invitation_expires() {
+        let (mut p, now, _scratch) = pairing(PairingMode::Closed);
+        let token = p.invite(now, 60 * SEC);
+        assert!(p.invitation_remaining(now).is_some());
+
+        let later = now + 61 * SEC;
+        assert!(p.invitation_remaining(later).is_none());
+        assert_eq!(
+            p.admit_with_token(&key(1), &token, later).0,
+            Admission::Rejected
+        );
+    }
+
+    #[test]
+    fn a_new_invitation_replaces_the_old_one_and_cancelling_withdraws_it() {
+        let (mut p, now, _scratch) = pairing(PairingMode::Closed);
+        let first = p.invite(now, 60 * SEC);
+        let second = p.invite(now, 60 * SEC);
+        assert_ne!(first, second);
+        assert_eq!(
+            p.admit_with_token(&key(1), &first, now).0,
+            Admission::Rejected,
+            "only the code on the screen works"
+        );
+
+        p.cancel_invitation();
+        assert_eq!(
+            p.admit_with_token(&key(1), &second, now).0,
+            Admission::Rejected
+        );
+        assert!(p.invitation_remaining(now).is_none());
+    }
+
+    #[test]
+    fn an_invitation_closes_the_window_behind_the_phone_like_any_pairing() {
+        let (mut p, now, _scratch) = pairing(PairingMode::Window(60 * SEC));
+        let token = p.invite(now, 60 * SEC);
+        assert_eq!(
+            p.admit_with_token(&key(1), &token, now).0,
+            Admission::NewlyPaired
+        );
+        assert!(
+            !p.is_open(now),
+            "nobody else can slip in behind the phone that scanned"
+        );
+    }
+
+    #[test]
+    fn a_known_phone_is_unaffected_by_an_invitation_it_does_not_use() {
+        let (mut p, now, _scratch) = pairing(PairingMode::Window(60 * SEC));
+        p.admit(&key(1), now);
+        let token = p.invite(now, 60 * SEC);
+        assert_eq!(p.admit_with_token(&key(1), &[], now).0, Admission::Known);
+        assert!(
+            p.invitation_remaining(now).is_some(),
+            "the code is still good for a new phone"
+        );
+        assert_eq!(
+            p.admit_with_token(&key(2), &token, now).0,
+            Admission::NewlyPaired
+        );
+    }
+
+    #[test]
+    fn forgetting_every_phone_withdraws_the_invitation_too() {
+        let (mut p, now, _scratch) = pairing(PairingMode::Closed);
+        let token = p.invite(now, 60 * SEC);
+        p.forget_all().unwrap();
+        assert_eq!(
+            p.admit_with_token(&key(1), &token, now).0,
+            Admission::Rejected
         );
     }
 }

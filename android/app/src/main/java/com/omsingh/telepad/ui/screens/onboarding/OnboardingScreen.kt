@@ -94,7 +94,7 @@ fun OnboardingScreen(onFinish: () -> Unit, modifier: Modifier = Modifier) {
                     textAlign = TextAlign.Center,
                 )
                 if (page.download) {
-                    OutlinedButton(onClick = { platform.openUrl(Links.RELEASES) }) { Text(stringResource(R.string.onboarding_download)) }
+                    OutlinedButton(onClick = { platform.openUrl(Links.DOWNLOAD) }) { Text(stringResource(R.string.onboarding_download)) }
                 }
             }
         }

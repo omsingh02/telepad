@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.HelpOutline
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -80,6 +81,7 @@ import com.omsingh.telepad.ui.theme.rememberReducedMotion
 fun DevicesRoute(
     viewModel: DevicesViewModel,
     onOpenRemote: () -> Unit,
+    onScan: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -102,7 +104,7 @@ fun DevicesRoute(
         }
     }
 
-    DevicesScreen(state = state, actions = viewModel, onOpenRemote = onOpenRemote, modifier = modifier)
+    DevicesScreen(state = state, actions = viewModel, onOpenRemote = onOpenRemote, onScan = onScan, modifier = modifier)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -113,6 +115,7 @@ fun DevicesScreen(
     onOpenRemote: () -> Unit,
     modifier: Modifier = Modifier,
     nowMs: Long = System.currentTimeMillis(),
+    onScan: () -> Unit = {},
 ) {
     val platform = LocalPlatformActions.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -145,11 +148,15 @@ fun DevicesScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { addSheet = AddTab.ADDRESS },
-                icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
-                text = { Text(stringResource(R.string.devices_add)) },
-            )
+            // With nothing listed yet, the empty state offers every way in itself; a button floating over
+            // its last line would only get in the way.
+            if (state.devices.isNotEmpty()) {
+                ExtendedFloatingActionButton(
+                    onClick = { addSheet = AddTab.ADDRESS },
+                    icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
+                    text = { Text(stringResource(R.string.devices_add)) },
+                )
+            }
         },
     ) { padding ->
         PullToRefreshBox(
@@ -166,7 +173,8 @@ fun DevicesScreen(
                 state = state,
                 actions = actions,
                 onOpenRemote = onOpenRemote,
-                onAddOther = { addSheet = AddTab.BLUETOOTH },
+                onScan = onScan,
+                onAdd = { addSheet = it },
                 onForget = { forgetting = it },
                 onHelp = { helpOpen = true },
                 nowMs = nowMs,
@@ -199,10 +207,14 @@ fun DevicesScreen(
                 actions.connectBluetooth(device)
             },
             onDismiss = { addSheet = null },
+            onScan = {
+                addSheet = null
+                onScan()
+            },
         )
     }
 
-    if (helpOpen) HelpSheet(onDismiss = { helpOpen = false }, onGetDesktop = { platform.openUrl(Links.RELEASES) })
+    if (helpOpen) HelpSheet(onDismiss = { helpOpen = false }, onGetDesktop = { platform.openUrl(Links.DOWNLOAD) })
 
     forgetting?.let { entry ->
         AlertDialog(
@@ -251,7 +263,8 @@ private fun DeviceList(
     state: DevicesUiState,
     actions: DevicesActions,
     onOpenRemote: () -> Unit,
-    onAddOther: () -> Unit,
+    onScan: () -> Unit,
+    onAdd: (AddTab) -> Unit,
     onForget: (DeviceEntry) -> Unit,
     onHelp: () -> Unit,
     nowMs: Long,
@@ -284,7 +297,7 @@ private fun DeviceList(
                     onFixBluetooth = { reason ->
                         // The two Bluetooth failures a person can fix are fixed in the sheet.
                         if (reason == FailureReason.BLUETOOTH_PERMISSION || reason == FailureReason.BLUETOOTH_DISABLED) {
-                            onAddOther()
+                            onAdd(AddTab.BLUETOOTH)
                         }
                     },
                     modifier = Modifier.padding(horizontal = Spacing.screen, vertical = Spacing.sm),
@@ -293,7 +306,7 @@ private fun DeviceList(
         }
 
         if (state.devices.isEmpty()) {
-            item(key = "empty") { EmptyDevices(searching = state.searching, onAddOther = onAddOther) }
+            item(key = "empty") { EmptyDevices(searching = state.searching, onScan = onScan, onAddOther = { onAdd(AddTab.ADDRESS) }) }
         } else {
             if (state.paired.isNotEmpty()) {
                 item(key = "header-paired") { SectionHeader(stringResource(R.string.devices_section_yours)) }
@@ -318,7 +331,7 @@ private fun DeviceList(
 
 /** What to show before anything has been found: where to begin, not an apology. */
 @Composable
-private fun EmptyDevices(searching: Boolean, onAddOther: () -> Unit) {
+private fun EmptyDevices(searching: Boolean, onScan: () -> Unit, onAddOther: () -> Unit) {
     val platform = LocalPlatformActions.current
     Column(
         modifier = Modifier
@@ -347,7 +360,12 @@ private fun EmptyDevices(searching: Boolean, onAddOther: () -> Unit) {
                 color = MaterialTheme.colorScheme.primary,
             )
         }
-        Button(onClick = { platform.openUrl(Links.RELEASES) }, modifier = Modifier.fillMaxWidth()) {
+        // Once Telepad runs on the PC, the code on its screen is the way in.
+        Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Rounded.QrCodeScanner, contentDescription = null, modifier = Modifier.padding(end = Spacing.sm))
+            Text(stringResource(R.string.devices_scan))
+        }
+        OutlinedButton(onClick = { platform.openUrl(Links.DOWNLOAD) }, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.devices_get_desktop))
         }
         TextButton(onClick = onAddOther) { Text(stringResource(R.string.devices_other_ways)) }

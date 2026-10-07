@@ -10,6 +10,7 @@ import com.omsingh.telepad.core.trust.DeviceEntry
 import com.omsingh.telepad.core.trust.PairedDevice
 import com.omsingh.telepad.core.wifi.DiscoveredServer
 import com.omsingh.telepad.core.wifi.LanNetworks
+import com.omsingh.telepad.core.wifi.PairingInvite
 import com.omsingh.telepad.core.wifi.WifiInputDispatcher
 import com.omsingh.telepad.settings.SettingsRepository
 import com.omsingh.telepad.testing.FakeDiscovery
@@ -303,7 +304,8 @@ class ConnectionManagerTest {
         awaitConnected()
         manager.forget(device)
         await(what = "the PC to be forgotten") { store.all().isEmpty() }
-        assertEquals(ConnectionState.Disconnected, manager.connectionState.value)
+        // The connection state is derived on the main thread, which has to run before it shows the change.
+        await(what = "the connection to end") { manager.connectionState.value == ConnectionState.Disconnected }
     }
 
     @Test
@@ -387,5 +389,126 @@ class ConnectionManagerTest {
         assertTrue(!discovery.started)
         manager.refreshDiscovery()
         assertEquals(1, discovery.refreshes)
+    }
+
+    // ── Pairing by QR code ───────────────────────────────────────────
+
+    private val token = ByteArray(16) { (0x40 + it).toByte() }
+
+    private fun inviteFor(
+        pc: NoiseTestServer,
+        token: ByteArray = this.token,
+        hosts: List<String> = listOf("127.0.0.1"),
+        name: String? = "Test-PC",
+    ) = PairingInvite(pc.publicKey, token, pc.port, hosts, name)
+
+    @Test
+    fun `scanning the code of a PC that is closed to new phones pairs with it, with nothing to compare`() {
+        val pc = server(allow = { false }).let { NoiseTestServer(allowClient = { false }, requiredToken = token).also { servers += it } }
+        manager.pairWithInvite(inviteFor(pc))
+        awaitConnected()
+        await(what = "the PC to be saved") { store.all().isNotEmpty() }
+
+        val saved = store.all().single()
+        assertEquals(pc.publicKeyBase64, saved.publicKey)
+        assertEquals("Test-PC", saved.name)
+        assertEquals("127.0.0.1", saved.host)
+        assertEquals(pc.port, saved.port)
+        await(what = "the sheet to close") { manager.pairing.value == null }
+        assertTrue("the token travelled inside the handshake", pc.handshakePayloads.any { it.contentEquals(token) })
+    }
+
+    @Test
+    fun `after pairing by code the PC is paired for good and needs no code again`() {
+        val pc = NoiseTestServer(allowClient = { false }, requiredToken = token).also { servers += it }
+        manager.pairWithInvite(inviteFor(pc))
+        awaitConnected()
+        await(what = "the PC to be saved") { store.all().isNotEmpty() }
+
+        manager.disconnect()
+        settle()
+        manager.connect(entryFor(pc, paired = true, key = pc.publicKeyBase64))
+        awaitConnected()
+        assertTrue("an ordinary connection carries no token", pc.handshakePayloads.last().isEmpty())
+    }
+
+    @Test
+    fun `a code that has been used pairs no second phone`() {
+        val pc = NoiseTestServer(allowClient = { false }, requiredToken = token).also { servers += it }
+        manager.pairWithInvite(inviteFor(pc))
+        awaitConnected()
+
+        // Another phone scans the same code (a photo of the screen, say).
+        build(emptyList())
+        manager.pairWithInvite(inviteFor(pc))
+        await(what = "the refusal") { manager.pairing.value is PairingUiState.Failed }
+        assertEquals(FailureReason.NOT_PAIRED, (manager.pairing.value as PairingUiState.Failed).reason)
+        assertTrue("a refused PC is not remembered", store.all().isEmpty())
+        assertTrue(pc.tokenSpent)
+    }
+
+    @Test
+    fun `a wrong token is refused and nothing is remembered`() {
+        val pc = NoiseTestServer(allowClient = { false }, requiredToken = token).also { servers += it }
+        manager.pairWithInvite(inviteFor(pc, token = ByteArray(16) { 1 }))
+        await(what = "the refusal") { manager.pairing.value is PairingUiState.Failed }
+        assertEquals(FailureReason.NOT_PAIRED, (manager.pairing.value as PairingUiState.Failed).reason)
+        assertTrue(store.all().isEmpty())
+        assertEquals(0, pc.handshakes.get())
+    }
+
+    @Test
+    fun `an address in the code that holds another PC is not used`() {
+        val real = NoiseTestServer(allowClient = { false }, requiredToken = token).also { servers += it }
+        val other = server()
+        // The code names the real PC, but its address now belongs to another Telepad PC.
+        discovery.found(DiscoveredServer("Test-PC", "127.0.0.1", real.port, real.publicKeyBase64, lastSeenMs = 1))
+        manager.pairWithInvite(PairingInvite(real.publicKey, token, other.port, listOf("127.0.0.1"), "Test-PC"))
+        // The wrong PC answers with a different key, so the code's PC is looked for by its key instead.
+        await(timeoutMs = 10_000, what = "a connection to the right PC") { manager.connectionState.value is ConnectionState.Connected }
+        assertEquals(real.publicKeyBase64, store.all().single().publicKey)
+        assertEquals("the other PC never saw the token", 0, other.handshakePayloads.size)
+    }
+
+    @Test
+    fun `a stale address falls back to finding the PC by its key`() {
+        val pc = NoiseTestServer(allowClient = { false }, requiredToken = token).also { servers += it }
+        discovery.found(DiscoveredServer("Test-PC", "127.0.0.1", pc.port, pc.publicKeyBase64, lastSeenMs = 1))
+        manager.pairWithInvite(inviteFor(pc, hosts = listOf("192.168.99.99")))
+        await(timeoutMs = 12_000, what = "a connection") { manager.connectionState.value is ConnectionState.Connected }
+        assertEquals("127.0.0.1", store.all().single().host)
+    }
+
+    @Test
+    fun `a PC that cannot be found at all is reported as unreachable and not remembered`() {
+        val pc = NoiseTestServer(allowClient = { false }, requiredToken = token).also { servers += it }
+        pc.silent = true
+        manager.pairWithInvite(inviteFor(pc))
+        await(timeoutMs = 12_000, what = "the failure") { manager.pairing.value is PairingUiState.Failed }
+        assertEquals(FailureReason.UNREACHABLE, (manager.pairing.value as PairingUiState.Failed).reason)
+        assertTrue(store.all().isEmpty())
+    }
+
+    @Test
+    fun `a PC paired before under another key is replaced by its code`() {
+        val reinstalled = NoiseTestServer(allowClient = { false }, requiredToken = token).also { servers += it }
+        val oldKey = randomKey()
+        build(listOf(PairedDevice(oldKey, "Test-PC", "127.0.0.1", reinstalled.port, pairedAtMs = 1, lastConnectedMs = 1)))
+
+        manager.pairWithInvite(inviteFor(reinstalled))
+        awaitConnected()
+        await(what = "the old record to be replaced") { store.all().singleOrNull()?.publicKey == reinstalled.publicKeyBase64 }
+        assertTrue("the old identity is gone", store.all().none { it.publicKey == oldKey })
+    }
+
+    @Test
+    fun `scanning a code while another attempt is under way starts again cleanly`() {
+        val pc = NoiseTestServer(allowClient = { false }, requiredToken = token).also { servers += it }
+        manager.connectToAddress("127.0.0.1", pc.port)
+        await { manager.pairing.value is PairingUiState.Verify }
+
+        manager.pairWithInvite(inviteFor(pc))
+        awaitConnected()
+        assertNull("the fingerprint sheet is gone", (manager.pairing.value as? PairingUiState.Verify))
     }
 }

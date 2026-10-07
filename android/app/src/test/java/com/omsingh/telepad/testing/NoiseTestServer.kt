@@ -28,6 +28,12 @@ class NoiseTestServer(
     private val allowClient: (clientPublicKey: ByteArray) -> Boolean = { true },
     private val hostInfoReply: ByteArray? = byteArrayOf(0x82.toByte(), 3, 0x02, 2, 1, 0),
     private val hostname: String = "Test-PC",
+    /**
+     * A one-time pairing token, as in the QR code on a real PC's screen. A phone that presents it inside its
+     * handshake is admitted even if [allowClient] says no, once; the phone is then remembered, as a real server
+     * remembers a paired phone.
+     */
+    private val requiredToken: ByteArray? = null,
 ) : AutoCloseable {
 
     private val privateKey = ByteArray(32)
@@ -43,6 +49,15 @@ class NoiseTestServer(
 
     /** Handshakes completed so far. */
     val handshakes = AtomicInteger()
+
+    /** The payload of every handshake request, as the phone sent it (a pairing token, or nothing). */
+    val handshakePayloads = CopyOnWriteArrayList<ByteArray>()
+
+    /** True once the token has admitted a phone: it works once. */
+    @Volatile var tokenSpent = false
+        private set
+
+    private val admittedByToken = CopyOnWriteArrayList<ByteArray>()
 
     /** While true the server swallows everything, as a PC that is switched off would. */
     @Volatile var silent = false
@@ -108,11 +123,14 @@ class NoiseTestServer(
         try {
             hs.localKeyPair.setPrivateKey(privateKey, 0)
             hs.start()
-            hs.readMessage(buf, 1, from.length - 1, ByteArray(0), 0)
+            val payloadBuf = ByteArray(64)
+            val payloadLen = hs.readMessage(buf, 1, from.length - 1, payloadBuf, 0)
+            val payload = payloadBuf.copyOf(payloadLen)
+            handshakePayloads += payload
 
             val clientKey = ByteArray(32)
             hs.remotePublicKey.getPublicKey(clientKey, 0)
-            if (!allowClient(clientKey)) {
+            if (!admits(clientKey, payload)) {
                 socket.send(DatagramPacket(byteArrayOf(NoiseSession.WIRE_PAIRING_REJECTED), 1, from.socketAddress))
                 return
             }
@@ -127,6 +145,16 @@ class NoiseTestServer(
         } finally {
             hs.destroy()
         }
+    }
+
+    /** Whether this phone may connect: already allowed, admitted earlier by the token, or presenting it now. */
+    private fun admits(clientKey: ByteArray, payload: ByteArray): Boolean {
+        if (allowClient(clientKey) || admittedByToken.any { it.contentEquals(clientKey) }) return true
+        val token = requiredToken ?: return false
+        if (tokenSpent || !payload.contentEquals(token)) return false
+        tokenSpent = true
+        admittedByToken += clientKey
+        return true
     }
 
     private fun onTransport(buf: ByteArray, from: DatagramPacket) {

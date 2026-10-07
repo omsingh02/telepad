@@ -18,6 +18,15 @@ coroutines = "1.9.0"
 # would change the encryption library under every build.
 noiseJava = "49377b6dfc6a1e75740bce2318118291a57c0d6e"
 
+# The camera and the QR code reader behind "Scan QR code". Both are Apache 2.0 and need no Google
+# Play Services, so the app stays installable without them and eligible for F-Droid.
+camerax = "1.4.1"
+zxing = "3.5.3"
+
+# The list of every library inside the app, with its license, shown under Settings, About. 11.2 is the line made for
+# the Android Gradle Plugin and Kotlin versions used here.
+aboutlibraries = "11.2.3"
+
 robolectric = "4.14.1"
 roborazzi = "1.30.1"
 
@@ -49,6 +58,15 @@ androidx-security-crypto             = { group = "androidx.security",    name = 
 
 noise-java                           = { group = "com.github.rweather",   name = "noise-java",                      version.ref = "noiseJava" }
 
+androidx-camera-core                 = { group = "androidx.camera",       name = "camera-core",                     version.ref = "camerax" }
+androidx-camera-camera2              = { group = "androidx.camera",       name = "camera-camera2",                  version.ref = "camerax" }
+androidx-camera-lifecycle            = { group = "androidx.camera",       name = "camera-lifecycle",                version.ref = "camerax" }
+androidx-camera-view                 = { group = "androidx.camera",       name = "camera-view",                     version.ref = "camerax" }
+zxing-core                           = { group = "com.google.zxing",      name = "core",                            version.ref = "zxing" }
+
+aboutlibraries-core                  = { group = "com.mikepenz",          name = "aboutlibraries-core",             version.ref = "aboutlibraries" }
+aboutlibraries-compose-m3            = { group = "com.mikepenz",          name = "aboutlibraries-compose-m3",       version.ref = "aboutlibraries" }
+
 kotlinx-serialization-json           = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json",     version.ref = "serialization" }
 kotlinx-coroutines-android           = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android",     version.ref = "coroutines" }
 kotlinx-coroutines-test              = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test",        version.ref = "coroutines" }
@@ -70,3 +88,4 @@ kotlin-android                       = { id = "org.jetbrains.kotlin.android",   
 kotlin-compose                       = { id = "org.jetbrains.kotlin.plugin.compose",           version.ref = "kotlin" }
 roborazzi                            = { id = "io.github.takahirom.roborazzi",                 version.ref = "roborazzi" }
 kotlin-serialization                 = { id = "org.jetbrains.kotlin.plugin.serialization",     version.ref = "kotlin" }
+aboutlibraries                       = { id = "com.mikepenz.aboutlibraries.plugin",            version.ref = "aboutlibraries" }

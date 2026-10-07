@@ -156,6 +156,31 @@ impl NoiseTransport {
     }
 }
 
+/// Length of the one-time token a pairing invitation (the QR code) carries.
+pub const PAIRING_TOKEN_LEN: usize = 16;
+
+/// A fresh random token for one pairing invitation: 128 bits from the operating system's
+/// secure random number generator.
+pub fn random_token() -> [u8; PAIRING_TOKEN_LEN] {
+    use rand::RngCore;
+    let mut token = [0u8; PAIRING_TOKEN_LEN];
+    rand::rngs::OsRng.fill_bytes(&mut token);
+    token
+}
+
+/// Compares two secrets without stopping at the first difference, so the time it takes says
+/// nothing about how much of a guess was right.
+pub fn secrets_equal(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut difference = 0u8;
+    for (x, y) in a.iter().zip(b) {
+        difference |= x ^ y;
+    }
+    difference == 0
+}
+
 /// Drives the server responder side of Noise IK.
 pub struct NoiseResponder {
     static_key: [u8; 32],
@@ -170,13 +195,25 @@ impl NoiseResponder {
         &self,
         msg1: &[u8],
     ) -> Result<(Vec<u8>, [u8; 32], NoiseTransport), CryptoError> {
+        let outcome = self.respond_handshake_with_payload(msg1)?;
+        Ok((outcome.reply, outcome.client_key, outcome.transport))
+    }
+
+    /// Like [`respond_handshake`](Self::respond_handshake), and also returns what the initiator
+    /// put inside its first message. That is encrypted to this server's key, so nobody watching
+    /// the network can read it; a phone pairing by QR code puts the code's one-time token there.
+    pub fn respond_handshake_with_payload(
+        &self,
+        msg1: &[u8],
+    ) -> Result<HandshakeOutcome, CryptoError> {
         let builder = Builder::new(NOISE_PATTERN.parse()?);
         let mut hs = builder
             .local_private_key(&self.static_key)
             .build_responder()?;
 
-        let mut read_buf = vec![0u8; msg1.len()];
-        hs.read_message(msg1, &mut read_buf)?;
+        let mut payload = vec![0u8; msg1.len()];
+        let payload_len = hs.read_message(msg1, &mut payload)?;
+        payload.truncate(payload_len);
 
         let remote_key_slice = hs
             .get_remote_static()
@@ -189,8 +226,25 @@ impl NoiseResponder {
         out_msg2.truncate(len);
 
         let transport = hs.into_stateless_transport_mode()?;
-        Ok((out_msg2, client_pubkey, NoiseTransport::new(transport)))
+        Ok(HandshakeOutcome {
+            reply: out_msg2,
+            client_key: client_pubkey,
+            transport: NoiseTransport::new(transport),
+            payload,
+        })
     }
+}
+
+/// What the responder learns from the first handshake message.
+pub struct HandshakeOutcome {
+    /// The second handshake message, to send back.
+    pub reply: Vec<u8>,
+    /// The initiator's static public key.
+    pub client_key: [u8; 32],
+    /// The session's transport.
+    pub transport: NoiseTransport,
+    /// What the initiator carried inside the first message: empty, or a pairing token.
+    pub payload: Vec<u8>,
 }
 
 /// Drives the client initiator side (used for tests and client bindings).
@@ -208,14 +262,22 @@ impl NoiseInitiator {
     }
 
     pub fn start_handshake(&self) -> Result<(Vec<u8>, snow::HandshakeState), CryptoError> {
+        self.start_handshake_with_payload(&[])
+    }
+
+    /// Starts the handshake with `payload` inside the first message, encrypted to the server.
+    pub fn start_handshake_with_payload(
+        &self,
+        payload: &[u8],
+    ) -> Result<(Vec<u8>, snow::HandshakeState), CryptoError> {
         let builder = Builder::new(NOISE_PATTERN.parse()?);
         let mut hs = builder
             .local_private_key(&self.local_priv)
             .remote_public_key(&self.remote_pub)
             .build_initiator()?;
 
-        let mut out_msg1 = vec![0u8; NOISE_IK_MSG1_LEN + 16];
-        let len = hs.write_message(&[], &mut out_msg1)?;
+        let mut out_msg1 = vec![0u8; NOISE_IK_MSG1_LEN + 16 + payload.len()];
+        let len = hs.write_message(payload, &mut out_msg1)?;
         out_msg1.truncate(len);
 
         Ok((out_msg1, hs))
@@ -513,6 +575,87 @@ fn decode_key(data: &[u8]) -> Result<([u8; 32], bool), CryptoError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_payload_in_the_first_message_reaches_the_server_and_no_one_else() {
+        let (server_priv, server_pub) = generate_keypair().unwrap();
+        let (client_priv, client_pub) = generate_keypair().unwrap();
+        let token = random_token();
+
+        let (msg1, hs) = NoiseInitiator::new(client_priv, server_pub)
+            .start_handshake_with_payload(&token)
+            .unwrap();
+        // The token is not in the clear on the network.
+        assert!(!msg1.windows(token.len()).any(|window| window == token));
+
+        let outcome = NoiseResponder::new(server_priv)
+            .respond_handshake_with_payload(&msg1)
+            .unwrap();
+        assert_eq!(outcome.payload, token);
+        assert_eq!(outcome.client_key, client_pub);
+
+        // The session still works afterwards.
+        let client = NoiseInitiator::finish_handshake(hs, &outcome.reply).unwrap();
+        let (nonce, packet) = client.encrypt(b"hello").unwrap();
+        let mut server = outcome.transport;
+        assert_eq!(server.decrypt(nonce, &packet).unwrap(), b"hello");
+    }
+
+    #[test]
+    fn a_handshake_without_a_payload_has_an_empty_one_and_the_old_length() {
+        let (server_priv, server_pub) = generate_keypair().unwrap();
+        let (client_priv, _) = generate_keypair().unwrap();
+
+        let (msg1, _hs) = NoiseInitiator::new(client_priv, server_pub)
+            .start_handshake()
+            .unwrap();
+        assert_eq!(
+            msg1.len(),
+            NOISE_IK_MSG1_LEN,
+            "older servers expect exactly this"
+        );
+
+        let outcome = NoiseResponder::new(server_priv)
+            .respond_handshake_with_payload(&msg1)
+            .unwrap();
+        assert!(outcome.payload.is_empty());
+    }
+
+    #[test]
+    fn the_plain_responder_still_accepts_a_handshake_that_carries_a_payload() {
+        // An older server ignores the payload: a phone that sends a token still connects to it.
+        let (server_priv, server_pub) = generate_keypair().unwrap();
+        let (client_priv, client_pub) = generate_keypair().unwrap();
+        let (msg1, _hs) = NoiseInitiator::new(client_priv, server_pub)
+            .start_handshake_with_payload(&random_token())
+            .unwrap();
+
+        let (_reply, key, _transport) = NoiseResponder::new(server_priv)
+            .respond_handshake(&msg1)
+            .unwrap();
+        assert_eq!(key, client_pub);
+    }
+
+    #[test]
+    fn tokens_are_random_and_compared_whole() {
+        let a = random_token();
+        let b = random_token();
+        assert_ne!(a, b);
+        assert!(secrets_equal(&a, &a));
+        assert!(!secrets_equal(&a, &b));
+
+        let mut almost = a;
+        almost[PAIRING_TOKEN_LEN - 1] ^= 1;
+        assert!(
+            !secrets_equal(&a, &almost),
+            "a difference in the last byte counts"
+        );
+        assert!(
+            !secrets_equal(&a, &a[..PAIRING_TOKEN_LEN - 1]),
+            "so does a different length"
+        );
+        assert!(secrets_equal(b"", b""));
+    }
 
     #[test]
     fn test_noise_ik_handshake_and_transport() {

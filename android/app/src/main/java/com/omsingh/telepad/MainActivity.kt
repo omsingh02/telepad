@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,6 +21,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.omsingh.telepad.connection.ConnectionManager
+import com.omsingh.telepad.core.wifi.PairingInvite
 import com.omsingh.telepad.platform.LocalPlatformActions
 import com.omsingh.telepad.platform.PlatformActions
 import com.omsingh.telepad.ui.TelepadRoot
@@ -95,6 +97,9 @@ class MainActivity : ComponentActivity() {
         // Hold the splash until the saved settings are read; the app itself is built after that.
         splash.setKeepOnScreenCondition { !settings.loaded.value }
         enableEdgeToEdge()
+        // A link that started the app. (Not again when the system rebuilds the activity: the code in
+        // it was good for one use.)
+        if (savedInstanceState == null) openPairingLink(intent)
 
         setContent {
             val preferences by settings.preferences.collectAsStateWithLifecycle()
@@ -124,5 +129,27 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         manager.onAppForegrounded()
+    }
+
+    /** A link opened while the app is running. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        openPairingLink(intent)
+    }
+
+    /**
+     * Pairs with the PC in a `telepad://pair` link, which is what its QR code says, when something other
+     * than the app's own scanner opens it (a camera app, a message). Anything else is ignored.
+     */
+    private fun openPairingLink(intent: Intent?) {
+        val link = intent?.data?.takeIf { it.scheme.equals("telepad", ignoreCase = true) && it.host.equals("pair", ignoreCase = true) }
+            ?: return
+        // Handled: it must not be handled again.
+        intent.data = null
+        when (val read = PairingInvite.parse(link.toString())) {
+            is PairingInvite.Read.Valid -> devices.pairWithInvite(read.invite)
+            PairingInvite.Read.NeedsNewerApp -> Toast.makeText(this, R.string.scan_problem_newer, Toast.LENGTH_LONG).show()
+            else -> Toast.makeText(this, R.string.scan_problem_damaged, Toast.LENGTH_LONG).show()
+        }
     }
 }

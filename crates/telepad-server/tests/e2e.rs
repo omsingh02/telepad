@@ -192,8 +192,13 @@ impl Client {
     }
 
     async fn handshake(&mut self, server_public: [u8; 32]) -> Handshake {
+        self.handshake_with(server_public, &[]).await
+    }
+
+    /// A handshake that carries `payload` (a pairing token, when the phone scanned a QR code).
+    async fn handshake_with(&mut self, server_public: [u8; 32], payload: &[u8]) -> Handshake {
         let (msg1, state) = NoiseInitiator::new(self.private, server_public)
-            .start_handshake()
+            .start_handshake_with_payload(payload)
             .unwrap();
         let mut packet = vec![WIRE_HANDSHAKE_INIT];
         packet.extend_from_slice(&msg1);
@@ -443,6 +448,162 @@ async fn a_new_phone_pairs_inside_the_window_which_closes_behind_it() {
     assert_eq!(
         stranger.handshake(server.public_key).await,
         Handshake::Rejected
+    );
+}
+
+// ── Pairing by QR code ───────────────────────────────────────────────────
+
+/// What a phone reads from the QR code's link: `(public key, token, port, name)`.
+fn read_invite(url: &str) -> ([u8; 32], Vec<u8>, u16, String) {
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine;
+    let query = url.strip_prefix("telepad://pair?").expect("a pairing link");
+    let field = |name: &str| {
+        query
+            .split('&')
+            .find_map(|pair| pair.strip_prefix(name)?.strip_prefix('='))
+            .unwrap_or_else(|| panic!("the link has no {name}: {url}"))
+            .to_owned()
+    };
+    let key: [u8; 32] = URL_SAFE_NO_PAD
+        .decode(field("k"))
+        .unwrap()
+        .try_into()
+        .unwrap();
+    (
+        key,
+        URL_SAFE_NO_PAD.decode(field("t")).unwrap(),
+        field("p").parse().unwrap(),
+        field("n"),
+    )
+}
+
+#[tokio::test]
+async fn the_qr_code_names_this_pc_and_how_to_reach_it() {
+    let server = TestServer::start(|c| c.pairing = PairingMode::Closed).await;
+    let invite = server.handle.create_invite(Duration::from_secs(60)).await;
+
+    let (key, token, port, name) = read_invite(&invite.url);
+    assert_eq!(
+        key, server.public_key,
+        "the phone checks the PC against this key"
+    );
+    assert_eq!(token.len(), 16);
+    assert_eq!(port, server.addr.port());
+    assert_eq!(name, "TEST-PC");
+    assert_eq!(invite.expires_in, Duration::from_secs(60));
+    assert!(server.handle.status().await.invitation.is_some());
+}
+
+#[tokio::test]
+async fn a_phone_that_scanned_the_code_pairs_although_pairing_is_closed() {
+    let server = TestServer::start(|c| c.pairing = PairingMode::Closed).await;
+    assert_eq!(
+        server.handle.status().await.pairing_window,
+        None,
+        "no window is open"
+    );
+
+    let invite = server.handle.create_invite(Duration::from_secs(60)).await;
+    let (key, token, _, _) = read_invite(&invite.url);
+
+    let (private, _public) = generate_keypair().unwrap();
+    let mut phone = Client::with_keys(&server, private).await;
+    assert_eq!(
+        phone.handshake_with(key, &token).await,
+        Handshake::Established
+    );
+    assert_eq!(server.handle.status().await.paired_devices, 1);
+    assert!(
+        server.handle.status().await.invitation.is_none(),
+        "the code is used up"
+    );
+
+    // It is paired for good: next time it needs no code.
+    let mut again = Client::with_keys(&server, private).await;
+    assert_eq!(
+        again.handshake(server.public_key).await,
+        Handshake::Established
+    );
+
+    // And it controls the PC like any other paired phone.
+    again.send(ClientMessage::TextInput("hi".into())).await;
+    assert_eq!(
+        server.wait_for_calls(1).await,
+        vec![InputCall::Text("hi".into())]
+    );
+}
+
+#[tokio::test]
+async fn a_code_pairs_one_phone_and_no_other() {
+    let server = TestServer::start(|c| c.pairing = PairingMode::Closed).await;
+    let invite = server.handle.create_invite(Duration::from_secs(60)).await;
+    let (key, token, _, _) = read_invite(&invite.url);
+
+    let mut first = Client::connect(&server).await;
+    assert_eq!(
+        first.handshake_with(key, &token).await,
+        Handshake::Established
+    );
+
+    // The same code on a second phone (a photograph of the screen, say) is worth nothing.
+    let mut second = Client::connect(&server).await;
+    assert_eq!(
+        second.handshake_with(key, &token).await,
+        Handshake::Rejected
+    );
+    assert_eq!(server.handle.status().await.paired_devices, 1);
+}
+
+#[tokio::test]
+async fn a_phone_without_the_token_or_with_a_wrong_one_is_refused_while_a_code_is_showing() {
+    let server = TestServer::start(|c| c.pairing = PairingMode::Closed).await;
+    let invite = server.handle.create_invite(Duration::from_secs(60)).await;
+    let (key, mut token, _, _) = read_invite(&invite.url);
+
+    let mut without = Client::connect(&server).await;
+    assert_eq!(without.handshake(key).await, Handshake::Rejected);
+
+    token[0] ^= 0xFF;
+    let mut wrong = Client::connect(&server).await;
+    assert_eq!(wrong.handshake_with(key, &token).await, Handshake::Rejected);
+    assert_eq!(server.handle.status().await.paired_devices, 0);
+}
+
+#[tokio::test]
+async fn an_expired_code_is_refused() {
+    let server = TestServer::start(|c| c.pairing = PairingMode::Closed).await;
+    let invite = server
+        .handle
+        .create_invite(Duration::from_millis(150))
+        .await;
+    let (key, token, _, _) = read_invite(&invite.url);
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let mut phone = Client::connect(&server).await;
+    assert_eq!(phone.handshake_with(key, &token).await, Handshake::Rejected);
+}
+
+#[tokio::test]
+async fn a_new_code_replaces_the_one_before() {
+    let server = TestServer::start(|c| c.pairing = PairingMode::Closed).await;
+    let old = server.handle.create_invite(Duration::from_secs(60)).await;
+    let new = server.handle.create_invite(Duration::from_secs(60)).await;
+    let (key, old_token, _, _) = read_invite(&old.url);
+    let (_, new_token, _, _) = read_invite(&new.url);
+
+    let mut stale = Client::connect(&server).await;
+    assert_eq!(
+        stale.handshake_with(key, &old_token).await,
+        Handshake::Rejected,
+        "only the code on the screen works"
+    );
+
+    let mut fresh = Client::connect(&server).await;
+    assert_eq!(
+        fresh.handshake_with(key, &new_token).await,
+        Handshake::Established
     );
 }
 

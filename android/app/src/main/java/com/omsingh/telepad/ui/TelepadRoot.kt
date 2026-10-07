@@ -50,6 +50,7 @@ import com.omsingh.telepad.core.input.ConnectionState
 import com.omsingh.telepad.ui.navigation.Devices
 import com.omsingh.telepad.ui.navigation.Onboarding
 import com.omsingh.telepad.ui.navigation.Remote
+import com.omsingh.telepad.ui.navigation.Scan
 import com.omsingh.telepad.ui.navigation.Settings
 import com.omsingh.telepad.ui.navigation.SettingsDetail
 import com.omsingh.telepad.ui.screens.devices.DevicesRoute
@@ -57,7 +58,10 @@ import com.omsingh.telepad.ui.screens.devices.DevicesViewModel
 import com.omsingh.telepad.ui.screens.onboarding.OnboardingScreen
 import com.omsingh.telepad.ui.screens.remote.RemoteRoute
 import com.omsingh.telepad.ui.screens.remote.RemoteViewModel
+import com.omsingh.telepad.ui.screens.scan.ScanRoute
 import com.omsingh.telepad.ui.screens.settings.AboutScreen
+import com.omsingh.telepad.ui.screens.settings.LicensesScreen
+import com.omsingh.telepad.ui.navigation.Licenses
 import com.omsingh.telepad.ui.screens.settings.AppearanceSettingsScreen
 import com.omsingh.telepad.ui.screens.settings.ConnectionSettingsScreen
 import com.omsingh.telepad.ui.screens.settings.KeyboardSettingsScreen
@@ -104,6 +108,15 @@ fun TelepadRoot(
     val imeVisible = WindowInsets.isImeVisible
     val showNavigation = tab != null && !imeVisible
     val connected = remote.connection is ConnectionState.Connected
+
+    // A pairing that starts away from the device list (a link opened from outside the app) is shown
+    // there, where the sheet that says how it goes lives.
+    val devices by devicesViewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(devices.pairing != null) {
+        if (devices.pairing != null && navController.currentDestination.tab() != Tab.DEVICES) {
+            navController.navigateToTab(Tab.DEVICES)
+        }
+    }
 
     // Connecting from the device list leads to the Remote, but only the first time a
     // connection comes up: a reconnect must not pull someone away from what they are doing.
@@ -170,7 +183,21 @@ fun TelepadRoot(
                         )
                     }
                     composable<Devices> {
-                        DevicesRoute(devicesViewModel, onOpenRemote = { navController.navigateToTab(Tab.REMOTE) })
+                        DevicesRoute(
+                            devicesViewModel,
+                            onOpenRemote = { navController.navigateToTab(Tab.REMOTE) },
+                            onScan = { navController.navigate(Scan) },
+                        )
+                    }
+                    composable<Scan> {
+                        ScanRoute(
+                            onInvite = { invite ->
+                                // Back to the device list, where the pairing sheet shows how it goes.
+                                devicesViewModel.pairWithInvite(invite)
+                                navController.popBackStack()
+                            },
+                            onClose = { navController.popBackStack() },
+                        )
                     }
                     composable<Remote> {
                         RemoteRoute(remoteViewModel, onGoToDevices = { navController.navigateToTab(Tab.DEVICES) })
@@ -180,6 +207,9 @@ fun TelepadRoot(
                             actions = settingsViewModel,
                             onOpen = { page -> navController.navigate(SettingsDetail(page.name)) },
                         )
+                    }
+                    composable<Licenses> {
+                        LicensesScreen(onBack = { navController.popBackStack() })
                     }
                     composable<SettingsDetail>(
                         enterTransition = { slideInHorizontally(tween(260)) { it / 5 } + fadeIn(tween(260)) },
@@ -195,7 +225,7 @@ fun TelepadRoot(
                             SettingsPage.CONNECTION -> ConnectionSettingsScreen(preferences, settingsViewModel, back)
                             SettingsPage.APPEARANCE -> AppearanceSettingsScreen(preferences, settingsViewModel, back)
                             SettingsPage.PRIVACY -> PrivacySettingsScreen(paired, settingsViewModel, back)
-                            SettingsPage.ABOUT -> AboutScreen(back)
+                            SettingsPage.ABOUT -> AboutScreen(back, onLicenses = { navController.navigate(Licenses) })
                         }
                     }
                 }

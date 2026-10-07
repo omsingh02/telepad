@@ -10,6 +10,7 @@ import com.omsingh.telepad.connection.ConnectionManager
 import com.omsingh.telepad.connection.PairingUiState
 import com.omsingh.telepad.core.input.ConnectionState
 import com.omsingh.telepad.core.trust.DeviceEntry
+import com.omsingh.telepad.core.wifi.PairingInvite
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -39,6 +40,9 @@ interface DevicesActions {
     fun disconnect()
     fun retry()
     fun connectToAddress(host: String, port: Int)
+
+    /** Pair with the PC whose QR code was scanned. */
+    fun pairWithInvite(invite: PairingInvite)
     fun connectBluetooth(device: BluetoothDeviceInfo)
     fun refreshBluetooth()
     fun confirmPairing()
@@ -53,6 +57,7 @@ interface DevicesActions {
             override fun disconnect() = Unit
             override fun retry() = Unit
             override fun connectToAddress(host: String, port: Int) = Unit
+            override fun pairWithInvite(invite: PairingInvite) = Unit
             override fun connectBluetooth(device: BluetoothDeviceInfo) = Unit
             override fun refreshBluetooth() = Unit
             override fun confirmPairing() = Unit
@@ -101,6 +106,7 @@ class DevicesViewModel(application: Application) : AndroidViewModel(application)
     override fun disconnect() = manager.disconnect()
     override fun retry() = manager.retry()
     override fun connectToAddress(host: String, port: Int) = manager.connectToAddress(host, port)
+    override fun pairWithInvite(invite: PairingInvite) = manager.pairWithInvite(invite)
     override fun connectBluetooth(device: BluetoothDeviceInfo) = manager.connectBluetooth(device.address, device.name)
     override fun refreshBluetooth() = manager.refreshBluetooth()
     override fun confirmPairing() = manager.confirmPairing()

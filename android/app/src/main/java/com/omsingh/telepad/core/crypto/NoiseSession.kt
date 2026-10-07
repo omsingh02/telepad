@@ -99,7 +99,7 @@ enum class HandshakeResult {
  *  - **BLAKE2s**: hash.
  *
  * Wire envelope:
- *  - `0xC0` — handshake init (phone → PC): 96 bytes Noise IK msg 1.
+ *  - `0xC0` — handshake init (phone → PC): 96 bytes Noise IK msg 1, plus the pairing token when there is one.
  *  - `0xC1` — handshake response (PC → phone): 48 bytes Noise IK msg 2.
  *  - `0xC2` — transport datagram: `[0xC2][nonce: 8B LE][ciphertext | 16-byte Poly1305 tag]`.
  */
@@ -126,6 +126,9 @@ class NoiseSession(
      *
      * @param serverStaticPubkeyBase64 The server's long-term X25519 public key.
      * @param timeoutMs How long to wait for the PC's answer.
+     * @param pairingToken The one-time token from the QR code on the PC's screen, when pairing that way.
+     *        It travels inside the first handshake message, which is encrypted to the PC's key, so nobody
+     *        watching the network can read it. A PC that is not expecting one simply ignores it.
      * @return [HandshakeResult.ESTABLISHED] on success (session is now ready to
      *         [encrypt] / [decrypt]); otherwise why it did not.
      */
@@ -133,6 +136,7 @@ class NoiseSession(
         socket: DatagramSocket,
         serverStaticPubkeyBase64: String,
         timeoutMs: Int = HANDSHAKE_TIMEOUT_MS,
+        pairingToken: ByteArray? = null,
     ): HandshakeResult {
         val serverPub = Base64.getDecoder().decode(serverStaticPubkeyBase64)
         require(serverPub.size == 32) { "Server pubkey must be 32 bytes" }
@@ -147,8 +151,9 @@ class NoiseSession(
             hs.start()
 
             // ── Send Noise IK message 1 ────────────────────────────
-            val msg1Buf = ByteArray(NOISE_IK_MSG1_LEN)
-            val msg1Len = hs.writeMessage(msg1Buf, 0, EMPTY_PAYLOAD, 0, 0)
+            val payload = pairingToken ?: EMPTY_PAYLOAD
+            val msg1Buf = ByteArray(NOISE_IK_MSG1_LEN + payload.size)
+            val msg1Len = hs.writeMessage(msg1Buf, 0, payload, 0, payload.size)
 
             val outFrame = ByteArray(1 + msg1Len)
             outFrame[0] = WIRE_HANDSHAKE_INIT

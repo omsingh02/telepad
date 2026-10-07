@@ -4,15 +4,22 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
-use telepad_platform::clipboard::{Clipboard, SystemClipboard};
-use telepad_platform::{
-    create_input_backend, paths, BackendOptions, InputBackend, RecordingBackend,
-};
+use telepad_platform::BackendOptions;
 use telepad_protocol::TELEPAD_PORT;
 use telepad_server::console::{self, Command};
-use telepad_server::pairing::DEFAULT_PAIRING_WINDOW;
-use telepad_server::{PairingMode, Server, ServerConfig, ServerHandle};
+use telepad_server::launch;
+use telepad_server::pairing::{DEFAULT_INVITATION_TTL, DEFAULT_PAIRING_WINDOW};
+use telepad_server::qr::{self, Style};
+use telepad_server::{PairingMode, Server, ServerHandle};
 use tokio::sync::Notify;
+
+/// What `--autostart` is asked to do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum AutostartAction {
+    On,
+    Off,
+    Status,
+}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -32,6 +39,11 @@ struct Cli {
     /// Directory for the identity key and the list of paired phones
     #[arg(long, value_name = "DIR")]
     key_dir: Option<PathBuf>,
+
+    /// Start this program when you log in (`on`), stop doing so (`off`), or say whether it does
+    /// (`status`), and then exit without starting the server.
+    #[arg(long, value_enum, value_name = "on|off|status")]
+    autostart: Option<AutostartAction>,
 
     /// Let a new phone pair for SECONDS (default 300) after startup, or until
     /// one phone has paired. Without this, new phones are only accepted on the
@@ -102,7 +114,50 @@ fn init_logging(verbose: bool) {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    match run(Cli::parse()).await {
+    let args = Cli::parse();
+    if let Some(action) = args.autostart {
+        return autostart(action);
+    }
+    match run(args).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(message) => {
+            eprintln!("error: {message}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Turns starting at login on or off, or says which it is.
+fn autostart(action: AutostartAction) -> ExitCode {
+    use telepad_platform::autostart;
+
+    let outcome = match action {
+        AutostartAction::Status => {
+            let state = if autostart::is_enabled() { "on" } else { "off" };
+            println!("Starting at login is {state}.");
+            return ExitCode::SUCCESS;
+        }
+        AutostartAction::On => autostart::Launch::current(&[])
+            .map_err(|error| format!("cannot tell where this program is: {error}"))
+            .and_then(|launch| autostart::enable(&launch).map_err(|error| error.to_string()))
+            .map(|()| {
+                println!("Telepad will start when you log in.");
+                println!("Run `telepad-server --autostart off` to undo it.");
+                if cfg!(windows) {
+                    println!(
+                        "Note: this is the console program, so a console window opens at every login."
+                    );
+                }
+                println!(
+                    "It runs without a terminal, so it cannot show a QR code: pair a phone before \
+                     you rely on it (or start it once with --pair)."
+                );
+            }),
+        AutostartAction::Off => autostart::disable()
+            .map_err(|error| error.to_string())
+            .map(|()| println!("Telepad will no longer start when you log in.")),
+    };
+    match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => {
             eprintln!("error: {message}");
@@ -114,39 +169,17 @@ async fn main() -> ExitCode {
 async fn run(args: Cli) -> Result<(), String> {
     init_logging(args.verbose);
 
-    let config_dir = args
-        .key_dir
-        .clone()
-        .unwrap_or_else(paths::default_config_dir);
-    paths::ensure_private_dir(&config_dir).map_err(|e| {
-        format!(
-            "cannot create the config directory {}: {e}",
-            config_dir.display()
-        )
-    })?;
-
-    let input: Box<dyn InputBackend> = if args.no_input {
-        Box::new(RecordingBackend::new())
-    } else {
-        create_input_backend(&backend_options(&args)).map_err(|e| {
-            format!("{e}\n\n(Use --no-input to run without injecting input, for diagnostics.)")
-        })?
-    };
-
-    let hostname = hostname::get()
-        .map(|h| h.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| "Desktop-PC".to_owned());
-
-    let mut config = ServerConfig::new(config_dir);
-    config.bind = std::net::SocketAddr::from(([0, 0, 0, 0], args.port));
-    config.hostname = hostname;
-    config.pairing = pairing_mode(&args);
-
-    let clipboard: telepad_server::clipboard::ClipboardFactory =
-        Box::new(|| SystemClipboard::new().map(|c| Box::new(c) as Box<dyn Clipboard>));
-    let server = Server::bind(config, input, clipboard)
-        .await
-        .map_err(|e| e.to_string())?;
+    let server = launch::start(launch::Options {
+        port: args.port,
+        config_dir: args.key_dir.clone(),
+        pairing: pairing_mode(&args),
+        input: if args.no_input {
+            launch::Input::Discard
+        } else {
+            launch::Input::System(backend_options(&args))
+        },
+    })
+    .await?;
     let handle = server.handle();
 
     let interactive = std::io::stdin().is_terminal();
@@ -168,7 +201,14 @@ async fn print_banner(server: &Server, handle: &ServerHandle, port: u16, interac
     let pairing = if status.accepts_any_device {
         "OPEN to every device (--insecure-accept-any-client)".to_owned()
     } else if let Some(left) = status.pairing_window {
-        format!("OPEN for {} s: connect your phone now", left.as_secs())
+        if interactive {
+            format!(
+                "OPEN for {} s: scan the code below with the app",
+                left.as_secs()
+            )
+        } else {
+            format!("OPEN for {} s: connect your phone now", left.as_secs())
+        }
     } else {
         let how = if interactive {
             "Type 'pair' to add another"
@@ -189,6 +229,43 @@ async fn print_banner(server: &Server, handle: &ServerHandle, port: u16, interac
     println!(" Input:       {}", server.input_backend_name());
     println!(" Pairing:     {pairing}");
     println!("==================================================");
+
+    // While pairing is open, the way to pair is to point the phone at the screen.
+    if interactive {
+        if let Some(left) = status.pairing_window {
+            show_invite(handle, left.min(MAX_INVITATION_TTL), Style::default()).await;
+        }
+    }
+}
+
+/// The longest a QR code stays good for, however long a pairing window the owner asks for. The code is a
+/// secret that anyone who can see the screen holds, so it should not outlast the moment.
+const MAX_INVITATION_TTL: Duration = Duration::from_secs(15 * 60);
+
+/// Shows a QR code that pairs one phone, with the instructions above it so that the code is the last
+/// thing printed: in a small window, what scrolls out of view is the text, not the code.
+async fn show_invite(handle: &ServerHandle, ttl: Duration, style: Style) {
+    let invite = handle.create_invite(ttl).await;
+    let minutes = ttl.as_secs().div_ceil(60).max(1);
+    println!();
+    println!(" Scan this code with the Telepad app: Devices, Add device, Scan QR code.");
+    println!(" It pairs one phone, and is good for {minutes} minute(s). If it is cut off, make the window taller.");
+    println!(
+        " No camera? Open this link on the phone instead: {}",
+        invite.url
+    );
+    if !invite.addresses.is_empty() {
+        let list: Vec<String> = invite.addresses.iter().map(ToString::to_string).collect();
+        println!(
+            " Or in the app: Devices, Add device, Address, and enter {}.",
+            list.join(" or ")
+        );
+    }
+    println!();
+    match qr::terminal(&invite.url, style) {
+        Some(drawing) => println!("{drawing}"),
+        None => println!(" (This PC's name is too long to draw as a code; use the link above.)"),
+    }
 }
 
 /// Resolves on Ctrl-C, on SIGTERM (so `systemctl stop` shuts down cleanly and
@@ -246,6 +323,9 @@ fn spawn_console(handle: ServerHandle, quit: Arc<Notify>) {
                 Err(console::ParseError::Unknown(word)) => {
                     println!("Unknown command '{word}'. Type 'help'.");
                 }
+                Err(console::ParseError::BadArgument(arg)) => {
+                    println!("'{arg}' is not an option here. Type 'help'.");
+                }
                 Err(console::ParseError::BadDuration(arg)) => {
                     println!(
                         "'{arg}' is not a valid number of seconds (1 to {}).",
@@ -264,10 +344,12 @@ async fn execute(command: Command, handle: &ServerHandle, quit: &Notify) -> bool
             let duration = duration.unwrap_or(DEFAULT_PAIRING_WINDOW);
             handle.open_pairing(duration).await;
             println!(
-                "Pairing is open for {} s. Connect your phone now.",
+                "Pairing is open for {} s. Scan the code with the app, or pick this PC in its list.",
                 duration.as_secs()
             );
+            show_invite(handle, duration.min(MAX_INVITATION_TTL), Style::default()).await;
         }
+        Command::Qr(style) => show_invite(handle, DEFAULT_INVITATION_TTL, style).await,
         Command::Close => {
             handle.close_pairing().await;
             println!("Pairing closed. Only paired phones can connect.");
@@ -295,6 +377,9 @@ async fn execute(command: Command, handle: &ServerHandle, quit: &Notify) -> bool
                 (false, Some(left)) => println!("Pairing:          open for {} s", left.as_secs()),
                 (false, None) => println!("Pairing:          closed"),
             }
+            if let Some(left) = status.invitation {
+                println!("QR code:          good for {} s more", left.as_secs());
+            }
         }
         Command::Help => println!("{}", console::HELP),
         Command::Quit => {
@@ -321,6 +406,28 @@ mod tests {
         assert_eq!(args.port, TELEPAD_PORT);
         assert!(matches!(pairing_mode(&args), PairingMode::WhenUnpaired(_)));
         assert!(!args.no_input);
+    }
+
+    #[test]
+    fn autostart_takes_on_off_or_status() {
+        assert_eq!(
+            cli(&["--autostart", "on"]).autostart,
+            Some(AutostartAction::On)
+        );
+        assert_eq!(
+            cli(&["--autostart", "off"]).autostart,
+            Some(AutostartAction::Off)
+        );
+        assert_eq!(
+            cli(&["--autostart", "status"]).autostart,
+            Some(AutostartAction::Status)
+        );
+        assert_eq!(
+            cli(&[]).autostart,
+            None,
+            "it is only ever done when asked for"
+        );
+        assert!(Cli::try_parse_from(["telepad-server", "--autostart", "maybe"]).is_err());
     }
 
     #[test]

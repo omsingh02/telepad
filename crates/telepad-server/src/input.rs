@@ -20,6 +20,16 @@ enum Command {
     Stop,
 }
 
+/// What kind of message this is, such as `TextInput`, and nothing of what it holds: what a person typed must never
+/// end up in a log.
+fn kind(message: &ClientMessage) -> String {
+    format!("{message:?}")
+        .split(|c: char| !c.is_alphanumeric())
+        .next()
+        .unwrap_or("input")
+        .to_owned()
+}
+
 /// Handle to the input thread. Cheap to use from any thread or task.
 pub struct InputWorker {
     tx: mpsc::Sender<Command>,
@@ -44,7 +54,10 @@ impl InputWorker {
                     let failure = match outcome {
                         Ok(Some(Err(err))) => err.to_string(),
                         Ok(_) => continue,
-                        Err(_) => format!("the input backend panicked while handling {message:?}"),
+                        Err(_) => format!(
+                            "the input backend panicked while handling a {} message",
+                            kind(&message)
+                        ),
                     };
                     if let Some(suppressed) = throttle.should_log(&failure, Instant::now()) {
                         if suppressed > 0 {
@@ -172,6 +185,21 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(5));
         }
+    }
+
+    #[test]
+    fn a_log_line_names_the_kind_of_message_and_never_what_was_typed() {
+        let typed = ClientMessage::TextInput("my password is hunter2".into());
+        assert_eq!(kind(&typed), "TextInput");
+        assert!(!kind(&typed).contains("hunter2"));
+
+        let clipboard = ClientMessage::ClipboardSet("a secret".into());
+        assert_eq!(kind(&clipboard), "ClipboardSet");
+        assert_eq!(
+            kind(&ClientMessage::MouseMove { dx: 3, dy: -4 }),
+            "MouseMove"
+        );
+        assert_eq!(kind(&ClientMessage::LockScreen), "LockScreen");
     }
 
     #[test]

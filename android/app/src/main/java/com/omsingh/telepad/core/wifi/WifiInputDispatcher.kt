@@ -277,7 +277,7 @@ class WifiInputDispatcher(
         data object Broken : Attempt
     }
 
-    private fun attemptOnce(w: ConnectionTarget.Wifi, timeoutMs: Int): Attempt {
+    private fun attemptOnce(w: ConnectionTarget.Wifi, timeoutMs: Int, pairingToken: ByteArray? = null): Attempt {
         // A fresh socket for every attempt, so a late reply to one cannot be mistaken
         // for the answer to the next.
         val socket = DatagramSocket()
@@ -286,7 +286,7 @@ class WifiInputDispatcher(
             socket.connect(InetSocketAddress(w.host, w.port))
             socket.receiveBufferSize = 256 * 1024
             val session = NoiseSession(identity.localStaticPrivateKey())
-            return when (session.runHandshake(socket, w.pubkeyBase64, timeoutMs)) {
+            return when (session.runHandshake(socket, w.pubkeyBase64, timeoutMs, pairingToken)) {
                 HandshakeResult.ESTABLISHED ->
                     Attempt.Established(Link(socket, session, w, newMonitor()))
                 HandshakeResult.NOT_PAIRED -> { socket.close(); Attempt.NotPaired }
@@ -316,8 +316,11 @@ class WifiInputDispatcher(
     /**
      * Connects to [w] and reports how it went. Callers that need to act on the result
      * (save the PC as paired, show guidance) use this; [connect] is the same without it.
+     *
+     * [pairingToken] is the one-time token from a QR code. It is used for this connect only and never kept
+     * with the target: once the PC has paired the phone, it is not needed again.
      */
-    suspend fun connectTo(w: ConnectionTarget.Wifi): ConnectOutcome {
+    suspend fun connectTo(w: ConnectionTarget.Wifi, pairingToken: ByteArray? = null): ConnectOutcome {
         if (this.target == w && _connectionState.value is ConnectionState.Connected) return ConnectOutcome.Connected
 
         val mine = begin(w)
@@ -326,9 +329,9 @@ class WifiInputDispatcher(
         // Not cancellable: the attempt owns a socket that must end up either live or closed,
         // and the bookkeeping below must run even if the caller has given up waiting.
         val result = withContext(Dispatchers.IO + NonCancellable) {
-            var attempt = attemptOnce(w, timing.firstAttemptMs)
+            var attempt = attemptOnce(w, timing.firstAttemptMs, pairingToken)
             if (attempt is Attempt.Silent && stillWanted(mine)) {
-                attempt = attemptOnce(w, timing.secondAttemptMs)
+                attempt = attemptOnce(w, timing.secondAttemptMs, pairingToken)
             }
             if (attempt is Attempt.Silent && stillWanted(mine)) {
                 ConnectResult(attempt, diagnose(w))

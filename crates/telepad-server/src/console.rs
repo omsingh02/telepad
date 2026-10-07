@@ -3,12 +3,15 @@
 //! It exists mainly so the owner can open the pairing window to add a phone
 //! without restarting the server.
 
+use crate::qr::Style;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Command {
-    /// Let a new device pair for this long.
+    /// Let a new device pair for this long, and show a QR code that pairs one phone.
     Pair(Option<Duration>),
+    /// Show a QR code that pairs one phone, whether or not pairing is open.
+    Qr(Style),
     /// Stop accepting new devices right now.
     Close,
     List,
@@ -23,6 +26,8 @@ pub enum ParseError {
     Empty,
     Unknown(String),
     BadDuration(String),
+    /// An option the command does not have.
+    BadArgument(String),
 }
 
 /// The longest window the console will open (a day), so a typo cannot leave
@@ -31,7 +36,9 @@ pub const MAX_PAIRING_SECONDS: u64 = 24 * 60 * 60;
 
 pub const HELP: &str = "\
 Commands:
-  pair [seconds]   let one new phone connect (default 300 s)
+  pair [seconds]   let one new phone connect (default 300 s) and show its QR code
+  qr [light]       show a QR code that pairs one phone (scan it in the app);
+                   say 'light' if the terminal has a white background
   close            stop accepting new phones now
   list             show paired phones
   forget           unpair every phone
@@ -53,6 +60,11 @@ pub fn parse(line: &str) -> Result<Command, ParseError> {
                 }
                 _ => Err(ParseError::BadDuration(arg.to_owned())),
             },
+        },
+        "qr" | "code" => match words.next().map(str::to_ascii_lowercase).as_deref() {
+            None | Some("dark") => Ok(Command::Qr(Style::DarkTerminal)),
+            Some("light" | "white") => Ok(Command::Qr(Style::LightTerminal)),
+            Some(other) => Err(ParseError::BadArgument(other.to_owned())),
         },
         "close" | "c" => Ok(Command::Close),
         "list" | "l" | "ls" => Ok(Command::List),
@@ -105,6 +117,15 @@ mod tests {
 
     #[test]
     fn simple_commands_and_aliases() {
+        assert_eq!(parse("qr"), Ok(Command::Qr(Style::DarkTerminal)));
+        assert_eq!(parse("QR"), Ok(Command::Qr(Style::DarkTerminal)));
+        assert_eq!(parse("code"), Ok(Command::Qr(Style::DarkTerminal)));
+        assert_eq!(parse("qr light"), Ok(Command::Qr(Style::LightTerminal)));
+        assert_eq!(parse("qr white"), Ok(Command::Qr(Style::LightTerminal)));
+        assert_eq!(
+            parse("qr purple"),
+            Err(ParseError::BadArgument("purple".into()))
+        );
         assert_eq!(parse("close"), Ok(Command::Close));
         assert_eq!(parse("c"), Ok(Command::Close));
         assert_eq!(parse("list"), Ok(Command::List));
@@ -127,7 +148,9 @@ mod tests {
 
     #[test]
     fn help_mentions_every_command() {
-        for word in ["pair", "close", "list", "forget", "status", "help", "quit"] {
+        for word in [
+            "pair", "qr", "close", "list", "forget", "status", "help", "quit",
+        ] {
             assert!(HELP.contains(word), "{word}");
         }
     }

@@ -169,10 +169,36 @@ class ScreenshotTest {
         }
     }
 
+    // ── The QR scanner ───────────────────────────────────────────────
+
+    private fun scan(access: com.omsingh.telepad.ui.screens.scan.CameraAccess, problem: com.omsingh.telepad.ui.screens.scan.ScanProblem? = null) = @Composable {
+        com.omsingh.telepad.ui.screens.scan.ScanScreen(
+            access = access,
+            problem = problem,
+            onAllow = {},
+            onOpenSettings = {},
+            onClose = {},
+            // A stand-in for the camera's picture: a dim, plain surface.
+            camera = { modifier -> Box(modifier.background(Color(0xFF2B3238))) },
+        )
+    }
+
+    @Test fun scan_camera() = shot("scan-camera", dark = true, content = scan(com.omsingh.telepad.ui.screens.scan.CameraAccess.GRANTED))
+
+    @Test fun scan_not_a_code() = shot(
+        "scan-problem",
+        dark = true,
+        content = scan(com.omsingh.telepad.ui.screens.scan.CameraAccess.GRANTED, com.omsingh.telepad.ui.screens.scan.ScanProblem.NOT_TELEPAD),
+    )
+
+    @Test fun scan_allow_camera() = shot("scan-permission", content = scan(com.omsingh.telepad.ui.screens.scan.CameraAccess.NEEDED))
+
+    @Test fun scan_camera_denied() = shot("scan-denied", content = scan(com.omsingh.telepad.ui.screens.scan.CameraAccess.DENIED))
+
     // ── Remote ───────────────────────────────────────────────────────
 
     private fun remote(state: com.omsingh.telepad.ui.screens.remote.RemoteUiState) = @Composable {
-        RemoteScreen(state, RemoteActions.None, KeyboardSession { }, onGoToDevices = {})
+        RemoteScreen(state, RemoteActions.None, androidx.compose.runtime.remember { KeyboardSession { } }, onGoToDevices = {})
     }
 
     @Test fun remote_pad() = shot("remote-pad", content = remote(Fixtures.remote()))
@@ -208,7 +234,7 @@ class ScreenshotTest {
 
     @Test fun settings_privacy() = shot("settings-privacy") { PrivacySettingsScreen(Fixtures.pairedDevices, SettingsActions.None, onBack = {}) }
 
-    @Test fun settings_about() = shot("settings-about") { AboutScreen(onBack = {}) }
+    @Test fun settings_about() = shot("settings-about") { AboutScreen(onBack = {}, onLicenses = {}) }
 
     // ── Themes ───────────────────────────────────────────────────────
 
@@ -240,6 +266,53 @@ class ScreenshotTest {
     )
 
     @Test fun remote_keys_mac() = shot("remote-keys-mac", interact = openTab("Keys"), content = remote(Fixtures.remote(os = HostOs.MACOS)))
+
+    /** Fn opens the function keys above the bar. */
+    @Test fun remote_keys_functions() = shot(
+        "remote-keys-functions",
+        interact = {
+            openTab("Keys")()
+            compose.mainClock.advanceTimeBy(800)
+            compose.onNodeWithContentDescription("Function keys").performClick()
+            compose.mainClock.advanceTimeBy(400)
+        },
+        content = remote(Fixtures.remote()),
+    )
+
+    /** The PC keyboard: every key of a real one, for keybinds that need them. */
+    @Test fun remote_keys_pc() = shot(
+        "remote-keys-pc",
+        dark = true,
+        interact = {
+            openTab("Keys")()
+            compose.mainClock.advanceTimeBy(800)
+            compose.onNodeWithContentDescription("More options").performClick()
+            compose.mainClock.advanceTimeBy(400)
+            compose.onNodeWithText("PC keyboard").performClick()
+            compose.mainClock.advanceTimeBy(400)
+        },
+        content = remote(Fixtures.remote(os = HostOs.LINUX)),
+    )
+
+    /** Held sideways, the phone's own keyboard would fill the screen, so the PC keyboard is shown. */
+    @Test @Config(qualifiers = PHONE_LANDSCAPE) fun remote_keys_landscape() = shot(
+        "remote-keys-landscape",
+        interact = openTab("Keys"),
+        content = remote(Fixtures.remote()),
+    )
+
+    /** Ctrl was left on in the Keys tab. The Pad says so, so that it is not forgotten. */
+    @Test fun remote_pad_modifier() = shot(
+        "remote-pad-modifier",
+        interact = {
+            openTab("Keys")()
+            compose.mainClock.advanceTimeBy(800)
+            compose.onNodeWithContentDescription("Control").performClick()
+            compose.mainClock.advanceTimeBy(400)
+            openTab("Pad")()
+        },
+        content = remote(Fixtures.remote(os = HostOs.LINUX)),
+    )
 
     // The media pictures show what the desktop server offers today, which has no Now Playing card.
     @Test fun remote_media() = shot("remote-media", interact = openTab("Media"), content = remote(Fixtures.remote(nowPlaying = false)))

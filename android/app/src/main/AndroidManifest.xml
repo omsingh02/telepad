@@ -18,6 +18,10 @@
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
 
+    <!-- The camera, only to read the QR code on the PC's screen, and only while the scanner is open.
+         It asks at that moment, with the reason on screen. Nothing is recorded or sent. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <!-- Staying connected in the background (optional, off by default). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
@@ -26,6 +30,9 @@
     <!-- Wi-Fi and Bluetooth are both optional: either one is enough. -->
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
+    <!-- A phone without a camera can still add a PC by its address or over Bluetooth. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <application
         android:name=".TelepadApp"
@@ -48,6 +55,14 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- The link in a pairing QR code (telepad://pair?...): a camera app that opens links, or
+                 a message with the link in it, takes the phone straight to pairing. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="telepad" android:host="pair" />
             </intent-filter>
         </activity>
 

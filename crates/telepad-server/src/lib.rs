@@ -6,9 +6,13 @@ pub mod clipboard;
 pub mod console;
 pub mod discovery;
 pub mod input;
+pub mod invite;
+pub mod launch;
 pub mod pairing;
+pub mod qr;
 pub mod server;
 pub mod sessions;
 
+pub use invite::Invite;
 pub use pairing::PairingMode;
 pub use server::{Server, ServerConfig, ServerError, ServerHandle, Status};

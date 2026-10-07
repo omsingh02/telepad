@@ -3,6 +3,7 @@
 use crate::clipboard::{truncate_to_char_boundary, ClipboardFactory, ClipboardHandle};
 use crate::discovery;
 use crate::input::InputWorker;
+use crate::invite::{self, Invite};
 use crate::pairing::{Admission, Pairing, PairingMode};
 use crate::sessions::{Session, SessionTable};
 use bytes::BytesMut;
@@ -13,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use telepad_crypto::{
-    compute_fingerprint, CryptoError, IdentityStore, NoiseResponder, PairingStore,
+    compute_fingerprint, CryptoError, HandshakeOutcome, IdentityStore, NoiseResponder, PairingStore,
 };
 use telepad_platform::InputBackend;
 use telepad_protocol::*;
@@ -121,6 +122,8 @@ pub struct Status {
     pub sessions: usize,
     pub paired_devices: usize,
     pub pairing_window: Option<Duration>,
+    /// Time left on the pairing invitation (the QR code), if one has been made.
+    pub invitation: Option<Duration>,
     pub accepts_any_device: bool,
 }
 
@@ -150,7 +153,42 @@ impl ServerHandle {
             sessions: state.sessions.len(),
             paired_devices: state.pairing.paired_count(),
             pairing_window: state.pairing.window_remaining(Instant::now()),
+            invitation: state.pairing.invitation_remaining(Instant::now()),
             accepts_any_device: state.pairing.accepts_any_device(),
+        }
+    }
+
+    /// Makes a pairing invitation for a QR code: a one-time token that lets the phone which scans
+    /// it pair even though no pairing window is open. It is good for `ttl`, for one phone, and
+    /// replaces any invitation made before it.
+    pub async fn create_invite(&self, ttl: Duration) -> Invite {
+        let token = self
+            .shared
+            .state
+            .lock()
+            .await
+            .pairing
+            .invite(Instant::now(), ttl);
+        let port = self
+            .shared
+            .socket
+            .local_addr()
+            .map(|addr| addr.port())
+            .unwrap_or(TELEPAD_PORT);
+        let addresses: Vec<std::net::Ipv4Addr> = telepad_platform::netif::local_ipv4_networks()
+            .iter()
+            .map(|network| network.ip)
+            .collect();
+        Invite {
+            addresses: invite::best_addresses(&addresses),
+            url: invite::build_url(
+                &self.shared.identity.public,
+                &token,
+                port,
+                &self.shared.config.hostname,
+                &addresses,
+            ),
+            expires_in: ttl,
         }
     }
 
@@ -378,20 +416,27 @@ async fn handle_packet(shared: &Arc<Shared>, packet: &[u8], src: SocketAddr) {
 async fn handshake(shared: &Arc<Shared>, packet: &[u8], src: SocketAddr) {
     // The Diffie-Hellman work runs before the state lock is taken, so a flood of
     // handshakes cannot stall packets from connected clients.
-    let (reply, client_key, transport) =
-        match NoiseResponder::new(shared.identity.private).respond_handshake(&packet[1..]) {
-            Ok(ok) => ok,
-            Err(err) => {
-                warn!("handshake from {src} failed: {err}");
-                return;
-            }
-        };
+    let HandshakeOutcome {
+        reply,
+        client_key,
+        transport,
+        payload: token,
+    } = match NoiseResponder::new(shared.identity.private)
+        .respond_handshake_with_payload(&packet[1..])
+    {
+        Ok(ok) => ok,
+        Err(err) => {
+            warn!("handshake from {src} failed: {err}");
+            return;
+        }
+    };
     let device = compute_fingerprint(&client_key);
     let now = Instant::now();
 
     let (admission, save_error, releases) = {
         let mut state = shared.state.lock().await;
-        let (admission, save_error) = state.pairing.admit(&client_key, now);
+        // A phone that scanned the QR code carries its token inside the handshake.
+        let (admission, save_error) = state.pairing.admit_with_token(&client_key, &token, now);
         let releases = if admission.is_allowed() {
             state
                 .sessions

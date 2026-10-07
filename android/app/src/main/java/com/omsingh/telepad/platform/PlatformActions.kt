@@ -46,7 +46,9 @@ val LocalPlatformActions = staticCompositionLocalOf<PlatformActions> { PlatformA
 
 /** Where people get Telepad for their PC, and where the project lives. */
 object Links {
-    const val RELEASES = "https://github.com/omsingh02/telepad/releases/latest"
+    /** Where to get Telepad for a PC: the website's download section, which offers the right file for the system. */
+    const val DOWNLOAD = "https://telepad-app.vercel.app/#download"
     const val REPOSITORY = "https://github.com/omsingh02/telepad"
     const val ISSUES = "https://github.com/omsingh02/telepad/issues"
+    const val PRIVACY = "https://github.com/omsingh02/telepad/blob/main/PRIVACY.md"
 }

@@ -33,6 +33,7 @@ import com.omsingh.telepad.core.trust.TrustResolver
 import com.omsingh.telepad.core.wifi.DiscoveryService
 import com.omsingh.telepad.core.wifi.LanNetworks
 import com.omsingh.telepad.core.wifi.PairingIntro
+import com.omsingh.telepad.core.wifi.PairingInvite
 import com.omsingh.telepad.core.wifi.ServerMessage
 import com.omsingh.telepad.core.wifi.WifiInputDispatcher
 import com.omsingh.telepad.core.wifi.WifiPerformanceManager
@@ -240,6 +241,58 @@ class ConnectionManager internal constructor(
     }
 
     /**
+     * Pair with the PC whose QR code was scanned.
+     *
+     * The code was read off the PC's own screen and carries the PC's key, so there is nothing for
+     * the person to compare: seeing it is the proof, and this is the one way a PC is trusted without
+     * the fingerprint step. It also carries a one-time token, which goes to the PC inside the encrypted
+     * handshake and lets this phone pair although the PC is not otherwise open to new phones.
+     *
+     * If a PC was paired before at the same address under the same name but with another key (it was
+     * reinstalled), the code replaces it: the person is looking at the PC that says so.
+     */
+    fun pairWithInvite(invite: PairingInvite) {
+        retry = { pairWithInvite(invite) }
+        beginAttempt()
+        val label = invite.name ?: invite.hosts.firstOrNull() ?: "PC"
+        connectJob = scope.launch {
+            _pairing.value = PairingUiState.Contacting(label)
+            val reached = locate(invite)
+            if (reached == null) {
+                _pairing.value = PairingUiState.Failed(label, FailureReason.UNREACHABLE)
+                return@launch
+            }
+            val key = invite.publicKeyBase64
+            val paired = withContext(Dispatchers.IO) { store.all() }
+            val replacing = (TrustResolver.resolve(key, reached.host, invite.name, paired) as? TrustDecision.KeyChanged)?.expected
+            val candidate = Candidate(invite.name ?: reached.host, reached.host, reached.port, key)
+            _pairing.value = PairingUiState.Connecting(candidate)
+            attemptWifi(candidate, replacing, pairingToken = invite.token)
+        }
+    }
+
+    private class Reached(val host: String, val port: Int)
+
+    /**
+     * Where the PC in a QR code can be reached right now: the first address in the code that answers
+     * with the code's key, else wherever discovery has seen that key. An address may be stale, or
+     * on a network this phone is not on; the key is what identifies the PC.
+     */
+    private suspend fun locate(invite: PairingInvite): Reached? = withContext(Dispatchers.IO) {
+        // Off the main thread: this waits, and waiting is not the interface's business.
+        val wanted = invite.publicKeyBase64
+        for (host in invite.hosts) {
+            val key = PairingIntro.fetchPublicKey(host, invite.port, prepare = lan::bind)
+            if (key != null && Base64.getEncoder().encodeToString(key) == wanted) return@withContext Reached(host, invite.port)
+        }
+        discovery.refresh()
+        val seen = withTimeoutOrNull(DISCOVERY_WAIT_MS) {
+            discovery.servers.first { servers -> servers.any { it.publicKey == wanted } }
+        }
+        seen?.firstOrNull { it.publicKey == wanted }?.let { Reached(it.host, it.port) }
+    }
+
+    /**
      * Decide what the PC's key means: trusted already, new, or changed. Trusted PCs
      * connect; the others wait for the user.
      */
@@ -294,13 +347,13 @@ class ConnectionManager internal constructor(
         _pairing.value = null
     }
 
-    private suspend fun attemptWifi(candidate: Candidate, replacing: PairedDevice?) {
+    private suspend fun attemptWifi(candidate: Candidate, replacing: PairedDevice?, pairingToken: ByteArray? = null) {
         if (bluetooth.connectionState.value !is ConnectionState.Disconnected) bluetooth.disconnect()
         _activeTransport.value = ConnectionState.Transport.WIFI
         _activeId.value = candidate.publicKey
 
         val target = ConnectionTarget.Wifi(candidate.host, candidate.port, candidate.publicKey, candidate.name)
-        when (val outcome = wifi.connectTo(target)) {
+        when (val outcome = wifi.connectTo(target, pairingToken)) {
             WifiInputDispatcher.ConnectOutcome.Connected -> onWifiConnected(candidate, replacing)
             is WifiInputDispatcher.ConnectOutcome.Failed -> onWifiFailed(candidate, outcome.reason)
             WifiInputDispatcher.ConnectOutcome.Superseded -> Unit
@@ -548,6 +601,9 @@ class ConnectionManager internal constructor(
     companion object {
         private const val TAG = "ConnectionManager"
         private const val OS_WAIT_MS = 4_000L
+
+        /** How long to wait for discovery to show a PC whose QR code gave no address that answered. */
+        private const val DISCOVERY_WAIT_MS = 4_000L
 
         @Volatile private var INSTANCE: ConnectionManager? = null
 

@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.roborazzi)
+    alias(libs.plugins.aboutlibraries)
 }
 
 android {
@@ -138,6 +139,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.aboutlibraries.core)
+    implementation(libs.aboutlibraries.compose.m3)
     implementation(libs.androidx.navigation.compose)
 
     // Persistence
@@ -150,6 +153,13 @@ dependencies {
 
     // Noise protocol implementation (resolved from JitPack at a pinned commit).
     implementation(libs.noise.java)
+
+    // Scanning the QR code on the PC's screen: the camera, and the code reader.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.zxing.core)
 
     // Tests
     testImplementation(libs.junit)

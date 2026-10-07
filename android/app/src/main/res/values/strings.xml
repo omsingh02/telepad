@@ -52,7 +52,24 @@
     <string name="devices_empty_body">Telepad turns your phone into a trackpad and keyboard for your computer. Set up takes a minute.</string>
     <string name="devices_empty_step_install">Install Telepad on your PC</string>
     <string name="devices_empty_step_network">Put your phone and PC on the same Wi‑Fi</string>
-    <string name="devices_empty_step_run">Start Telepad on the PC, then pick it here</string>
+    <string name="devices_empty_step_run">Start Telepad on the PC, then scan the code it shows</string>
+    <string name="devices_scan">Scan QR code</string>
+    <string name="scan_title">Scan the code on your PC</string>
+    <string name="scan_hint">Point the camera at the code Telepad shows on your PC. It pairs this phone in a moment.</string>
+    <string name="scan_where">No code on the screen? On your PC, click the Telepad icon and choose Pair a phone.</string>
+    <string name="scan_close">Close the scanner</string>
+    <string name="scan_camera_title">Allow the camera</string>
+    <string name="scan_camera_body">Telepad uses the camera only to read the code on your PC’s screen. Nothing is recorded or sent anywhere.</string>
+    <string name="scan_camera_allow">Allow camera</string>
+    <string name="scan_camera_denied_title">The camera is off for Telepad</string>
+    <string name="scan_camera_denied_body">Turn it on in the app’s settings to scan the code. You can also add the PC with its address.</string>
+    <string name="scan_open_settings">Open settings</string>
+    <string name="scan_no_camera">This phone has no camera that can scan. Add the PC with its address instead.</string>
+    <string name="scan_problem_not_telepad">That is not a Telepad code.</string>
+    <string name="scan_problem_newer">This code needs a newer version of Telepad.</string>
+    <string name="scan_problem_damaged">That code is damaged. Show a new one on the PC.</string>
+    <string name="add_scan">Scan QR code</string>
+    <string name="add_scan_hint">The quickest way. It pairs this phone with nothing to compare.</string>
     <string name="devices_get_desktop">Get Telepad for your PC</string>
     <string name="devices_help_title">Can’t find your PC?</string>
     <string name="devices_help_1">Make sure Telepad is running on your PC.</string>
@@ -65,7 +82,7 @@
     <string name="failure_unreachable_title">Couldn’t reach %1$s</string>
     <string name="failure_unreachable_body">Check that the PC is on, Telepad is running, and both devices are on the same network.</string>
     <string name="failure_not_paired_title">%1$s hasn’t accepted this phone</string>
-    <string name="failure_not_paired_body">The PC only accepts new phones while pairing is open. In the Telepad window on the PC, type pair, then try again.</string>
+    <string name="failure_not_paired_body">The PC only accepts new phones while pairing is open, or with a fresh QR code. On the PC, click the Telepad icon and choose Pair a phone, then scan the new code.</string>
     <string name="failure_key_changed_title">%1$s has changed</string>
     <string name="failure_key_changed_body">It answers with a different identity than the one that was paired.</string>
     <string name="failure_handshake_title">Couldn’t secure the connection</string>
@@ -84,7 +101,7 @@
     <!-- Pairing -->
     <string name="pairing_contacting">Contacting %1$s…</string>
     <string name="pairing_verify_title">Verify this PC</string>
-    <string name="pairing_verify_body">Check that this code matches the one in the Telepad window on %1$s.</string>
+    <string name="pairing_verify_body">Check that this code matches the one Telepad shows on %1$s, under This PC on its Pair a phone page.</string>
     <string name="pairing_verify_warning">If it doesn’t, don’t continue: something else on the network may be answering.</string>
     <string name="pairing_matches">They match</string>
     <string name="pairing_connecting">Connecting…</string>
@@ -93,14 +110,14 @@
     <string name="pairing_changed_advice">Continue only if you reinstalled Telepad on this PC and this code matches the one it shows now.</string>
     <string name="pairing_changed_continue">Trust the new key</string>
     <string name="pairing_not_paired_title">%1$s doesn’t know this phone yet</string>
-    <string name="pairing_not_paired_body" tools:ignore="TypographyDashes">For safety a PC only accepts new phones while pairing is open. In the Telepad window on the PC, type pair (or start it with --pair), then try again.</string>
+    <string name="pairing_not_paired_body">For safety a PC only accepts new phones that scan its QR code. On the PC, click the Telepad icon and choose Pair a phone, then scan the code and try again.</string>
     <string name="pairing_security_note">Pairing happens once. Everything sent afterwards is encrypted.</string>
 
     <!-- Add device -->
     <string name="add_title">Add a device</string>
     <string name="add_tab_address">Address</string>
     <string name="add_tab_bluetooth">Bluetooth</string>
-    <string name="add_address_hint">The Telepad window on your PC shows its address, for example 192.168.1.20.</string>
+    <string name="add_address_hint">Telepad shows your PC’s address on its Pair a phone page, for example 192.168.1.20.</string>
     <string name="add_address_label">IP address</string>
     <string name="add_port_label">Port</string>
     <string name="add_connect">Connect</string>
@@ -163,17 +180,29 @@
     <string name="pad_gesture_buttons">Hold a button with one thumb and drag with another finger to select</string>
 
     <!-- Keyboard -->
-    <string name="keys_placeholder">Type here. It is sent as you type.</string>
+    <string name="keys_placeholder">Type on your PC</string>
     <string name="keys_clear">Clear</string>
-    <string name="keys_chord_hint">Hold a modifier while you tap keys. Tap it once for the next key, twice to lock it, or hold it alone to press it by itself.</string>
     <string name="keys_chord_active">%1$s + …</string>
     <string name="keys_hide_text">Hide what I type</string>
     <string name="keys_show_text">Show what I type</string>
-    <string name="keys_function_row">Function keys F1 to F12</string>
     <string name="keys_field_description">Text sent to the PC as you type</string>
-    <string name="keys_section_keys">Keys</string>
-    <string name="keys_section_text">Type text</string>
     <string name="keys_section_shortcuts">Shortcuts</string>
+    <string name="keys_function_keys">Function keys</string>
+    <string name="keys_function_keys_shown">Function keys shown</string>
+    <string name="keys_function_keys_hidden">Function keys hidden</string>
+    <string name="keys_more">More options</string>
+    <string name="keys_menu_pc_layout">PC keyboard</string>
+    <string name="keys_menu_phone_layout">Phone keyboard</string>
+    <string name="keys_menu_live">Send each key at once</string>
+    <string name="keys_menu_help">How the keys work</string>
+    <string name="keys_release_modifiers">Release the modifier keys</string>
+    <string name="keys_help_title">Using the keys</string>
+    <string name="keys_help_type">Type with your phone’s keyboard. What you type is sent to the PC, and autocorrect, swipe typing and voice all work.</string>
+    <string name="keys_help_chord">For a shortcut, tap Ctrl, Alt, Shift or the Windows key above the keyboard, then a letter on your keyboard. Ctrl, then C, is Ctrl+C.</string>
+    <string name="keys_help_lock">Tap a modifier twice to keep it on for several keys. Tap it again to let go.</string>
+    <string name="keys_help_hold">Or hold a modifier with one finger while another taps a key. Held on its own for a moment, it is pressed by itself: Super opens a launcher.</string>
+    <string name="keys_help_fn">Fn shows F1 to F12, Page Up, Page Down, Insert and Print Screen.</string>
+    <string name="keys_help_pc">The PC keyboard in the menu has every key of a real keyboard, for keybinds that need them.</string>
     <string name="keys_modifier_armed">%1$s, on for the next key</string>
     <string name="keys_modifier_locked">%1$s, locked on</string>
     <string name="keys_modifier_off">%1$s, off</string>
@@ -187,6 +216,9 @@
     <string name="key_tab">Tab</string>
     <string name="key_enter">Enter</string>
     <string name="key_delete">Del</string>
+    <string name="key_insert">Ins</string>
+    <string name="key_print_screen">PrtSc</string>
+    <string name="key_fn">Fn</string>
     <string name="key_home">Home</string>
     <string name="key_end">End</string>
     <string name="key_page_up">PgUp</string>
@@ -342,7 +374,9 @@
     <string name="about_issues">Report a problem or suggest something</string>
     <string name="about_license">Released under the MIT license.</string>
     <string name="about_libraries_title">Built with</string>
-    <string name="about_libraries">Kotlin, Jetpack Compose with Material 3, AndroidX and the Noise Protocol (noise-java). Thanks to all of their authors.</string>
+    <string name="about_libraries">Telepad is built with open source libraries, such as Kotlin, Jetpack Compose, CameraX, ZXing and the Noise Protocol (noise-java). Thanks to all of their authors.</string>
+    <string name="about_licenses">Open-source licenses</string>
+    <string name="about_privacy">Privacy: nothing leaves your network</string>
 
     <!-- Onboarding -->
     <string name="onboarding_welcome_title">Your phone, your PC’s trackpad</string>
@@ -350,7 +384,7 @@
     <string name="onboarding_install_title">Install Telepad on your PC</string>
     <string name="onboarding_install_body">A small free app on your computer receives what you do on the phone. It runs on Windows, macOS and Linux.</string>
     <string name="onboarding_network_title">Same Wi‑Fi, then a quick check</string>
-    <string name="onboarding_network_body">Put both devices on the same network. The first time, you compare a short code on the phone with the one on the PC. That is what keeps strangers out.</string>
+    <string name="onboarding_network_body">Put both devices on the same network, then scan the QR code that Telepad shows on the PC. That one scan is what keeps strangers out.</string>
     <string name="onboarding_get_started">Get started</string>
     <string name="onboarding_download">Get Telepad for PC</string>
     <string name="onboarding_page">Page %1$d of %2$d</string>

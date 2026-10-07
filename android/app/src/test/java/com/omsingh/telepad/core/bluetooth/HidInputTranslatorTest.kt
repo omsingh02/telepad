@@ -108,7 +108,11 @@ class HidInputTranslatorTest {
 
     @Test
     fun `a drag holds the button while the pointer moves, then lets go`() {
-        send(InputEvent.DragStart(), InputEvent.MouseMove(5f, 0f), InputEvent.DragEnd())
+        send(InputEvent.DragStart())
+        // A move is gathered on the calling thread and sent with the next event the worker handles, so the move
+        // has to come after the drag has started, as it does when a finger really moves, not in the same instant.
+        settle()
+        send(InputEvent.MouseMove(5f, 0f), InputEvent.DragEnd())
         settle()
         assertEquals(listOf(0x01, 0x01, 0x00), sink.mouse.map { it.buttons })
         assertEquals(listOf(0, 5, 0), sink.mouse.map { it.dx })

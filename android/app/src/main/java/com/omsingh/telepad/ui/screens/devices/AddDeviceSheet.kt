@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.BluetoothSearching
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -63,6 +64,7 @@ fun AddDeviceSheet(
     onConnectAddress: (host: String, port: Int) -> Unit,
     onConnectBluetooth: (BluetoothDeviceInfo) -> Unit,
     onDismiss: () -> Unit,
+    onScan: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(initialTab) }
     ModalBottomSheet(
@@ -76,6 +78,7 @@ fun AddDeviceSheet(
             bluetooth = bluetooth,
             onConnectAddress = onConnectAddress,
             onConnectBluetooth = onConnectBluetooth,
+            onScan = onScan,
         )
     }
 }
@@ -90,6 +93,7 @@ fun AddDeviceContent(
     bluetooth: BluetoothAvailability,
     onConnectAddress: (host: String, port: Int) -> Unit,
     onConnectBluetooth: (BluetoothDeviceInfo) -> Unit,
+    onScan: () -> Unit = {},
 ) {
     Column(
         Modifier
@@ -101,6 +105,21 @@ fun AddDeviceContent(
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.padding(horizontal = Spacing.xl, vertical = Spacing.sm),
         )
+        // The way most people should take: point the camera at the PC's screen.
+        Column(
+            Modifier.padding(horizontal = Spacing.xl, vertical = Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+        ) {
+            Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Rounded.QrCodeScanner, contentDescription = null, modifier = Modifier.padding(end = Spacing.sm))
+                Text(stringResource(R.string.add_scan))
+            }
+            Text(
+                stringResource(R.string.add_scan_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
             Tab(selected = tab == AddTab.ADDRESS, onClick = { onTabChange(AddTab.ADDRESS) }, text = { Text(stringResource(R.string.add_tab_address)) })
             Tab(selected = tab == AddTab.BLUETOOTH, onClick = { onTabChange(AddTab.BLUETOOTH) }, text = { Text(stringResource(R.string.add_tab_bluetooth)) })

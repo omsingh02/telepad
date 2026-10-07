@@ -1,6 +1,7 @@
 package com.omsingh.telepad.ui.screens
 
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -18,7 +19,9 @@ import com.omsingh.telepad.connection.BluetoothAvailability
 import com.omsingh.telepad.connection.BluetoothDeviceInfo
 import com.omsingh.telepad.core.input.ConnectionState
 import com.omsingh.telepad.core.input.FailureReason
+import com.omsingh.telepad.platform.Links
 import com.omsingh.telepad.core.trust.DeviceEntry
+import com.omsingh.telepad.core.wifi.PairingInvite
 import com.omsingh.telepad.ui.Fixtures
 import com.omsingh.telepad.ui.screens.devices.DevicesActions
 import com.omsingh.telepad.ui.screens.devices.DevicesScreen
@@ -56,6 +59,7 @@ class DevicesScreenTest {
         override fun disconnect() { disconnects++ }
         override fun retry() { retries++ }
         override fun connectToAddress(host: String, port: Int) { addresses += host to port }
+        override fun pairWithInvite(invite: PairingInvite) {}
         override fun connectBluetooth(device: BluetoothDeviceInfo) { bluetooth += device }
         override fun refreshBluetooth() {}
         override fun confirmPairing() {}
@@ -68,11 +72,19 @@ class DevicesScreenTest {
     @Before
     fun setUp() = noAnimations()
 
+    private var scans = 0
+
     private fun show(state: DevicesUiState, onOpenRemote: () -> Unit = {}) =
-        compose.show(platform) { DevicesScreen(state, actions, onOpenRemote, nowMs = Fixtures.NOW) }
+        compose.show(platform) { DevicesScreen(state, actions, onOpenRemote, nowMs = Fixtures.NOW, onScan = { scans++ }) }
 
     private fun openAddSheet() {
-        compose.onNodeWithText(string(R.string.devices_add), useUnmergedTree = true).performClick()
+        // With PCs listed, the way in is the button that floats; with none, the empty state has its own.
+        val button = compose.onAllNodesWithText(string(R.string.devices_add), useUnmergedTree = true)
+        if (button.fetchSemanticsNodes().isNotEmpty()) {
+            button[0].performClick()
+        } else {
+            compose.onNodeWithText(string(R.string.devices_other_ways)).performClick()
+        }
         compose.settle()
     }
 
@@ -84,6 +96,27 @@ class DevicesScreenTest {
     private fun chooseForget() {
         compose.onNode(hasText(string(R.string.action_forget)) and hasAnyAncestor(isPopup())).performClick()
         compose.settle()
+    }
+
+    @Test
+    fun `with no PC yet the first thing offered is to scan its code`() {
+        show(DevicesUiState(searching = true))
+        compose.onNodeWithText(string(R.string.devices_scan)).assertIsDisplayed().performClick()
+        assertEquals(1, scans)
+    }
+
+    @Test
+    fun `the add sheet leads with scanning, and closing it for the scanner`() {
+        show(Fixtures.devicesList)
+        openAddSheet()
+        compose.onNodeWithText(string(R.string.add_scan)).assertExists()
+        compose.onNodeWithText(string(R.string.add_scan_hint)).assertExists()
+
+        compose.onNodeWithText(string(R.string.add_scan)).performClick()
+        compose.settle()
+        assertEquals(1, scans)
+        // The sheet is gone: the scanner takes the whole screen.
+        compose.onNodeWithText(string(R.string.add_scan)).assertDoesNotExist()
     }
 
     @Test
@@ -164,7 +197,7 @@ class DevicesScreenTest {
         show(DevicesUiState())
         compose.onNodeWithText(string(R.string.devices_empty_title)).assertIsDisplayed()
         compose.onNodeWithText(string(R.string.devices_get_desktop)).performClick()
-        assertTrue(platform.calls.single().startsWith("open:https://github.com/"))
+        assertEquals(listOf("open:${Links.DOWNLOAD}"), platform.calls)
     }
 
     @Test
