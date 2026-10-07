@@ -28,7 +28,7 @@ A new desktop server for Windows, Linux and macOS, and a redesigned Android app.
 - **Redesigned** around three places: *Devices*, *Remote* (Pad, Keys, Media) and *Settings*. Material 3, with colors generated from the accent you pick or from your wallpaper (Material You) in light and dark, tested for contrast; portrait, landscape and tablets; TalkBack and reduced-motion support.
 - **Added** a first-run walkthrough, a pull-to-refresh device list and clear explanations when a connection fails and what to do about it.
 - **Touchpad:** a gesture engine with tap, double-tap, tap-and-drag, press-and-hold, two- and three-finger taps, momentum scrolling and a scroll strip; the pad shows what it understood. Mouse buttons that really hold. Four acceleration curves and a pad in the settings to try them on.
-- **Keyboard:** the phone's keyboard types into the PC as you type (autocorrect works); sticky Ctrl, Alt, Shift and Win/⌘/Super; function keys; shortcuts that use the PC's own key names and combinations; clipboard buttons that never share anything automatically.
+- **Keyboard:** the phone's keyboard types into the PC as you type (autocorrect works); a full on-screen keyboard for keybinds (letters, digits, punctuation, function and editing keys, arrows) whose Ctrl, Alt, Shift and Win/⌘/Super keys can be held with one finger while another taps (a real chord), tapped for the next key, double-tapped to lock, or held alone to press by themselves; shortcuts that use the PC's own key names and combinations; clipboard buttons that never share anything automatically.
 - **Media and remote:** playback and volume with hold-to-repeat, slide controls and PC actions (show desktop, task view, task manager, screenshot, files, browser, lock).
 - **Connection:** a PC is identified by its key rather than its address, so a new IP address is still the same PC. The app notices when a PC stops answering, reconnects on its own and says why when it cannot, and warns if a PC answers with a different key than the one you paired. A PC is remembered only after you have confirmed its fingerprint and a secure connection has really worked. Optionally stays connected in the background with a notification that has play/pause, volume and disconnect.
 - **Bluetooth:** the keyboard now sends system actions as the PC's own shortcuts, and tells you which characters it cannot type.
@@ -37,9 +37,10 @@ A new desktop server for Windows, Linux and macOS, and a redesigned Android app.
 
 ### Project
 
-- The release workflow stops unless the tag, the app version and the server version agree, and its test step now runs the debug unit tests (the release variant cannot run the screen tests).
-- CI checks formatting (`cargo fmt`), builds a minified release APK, and runs hundreds of automated tests, among them networking tests against a stand-in PC that speaks the real protocol, tests of every trust decision, and screen tests that render every screen into the pictures in the README.
-- Added `CONTRIBUTING.md`, `SECURITY.md` and this file.
+- The release workflow stops unless the tag, the app version and the server version agree, and its test step now runs the debug unit tests (the release variant cannot run the screen tests). It publishes every file under a name with the version and one without it (so `releases/latest/download/telepad-android.apk` keeps working), uses this changelog as the release text, and its `SHA256SUMS` no longer lists itself.
+- CI checks formatting (`cargo fmt`), runs Android lint (errors fail the build), builds a minified release APK, and runs hundreds of automated tests, among them networking tests against a stand-in PC that speaks the real protocol, tests of every trust decision, and screen tests that render every screen into the pictures in the README.
+- Added `CONTRIBUTING.md`, `SECURITY.md` and this file, issue and pull request templates, Dependabot, a manual test plan for real devices (`docs/manual-testing.md`), and release scripts (`scripts/`).
+- Added a landing page (`website/`), the logo and the other brand files (`docs/brand/`).
 - Android app versions now follow the project: `versionCode` is derived from `versionName`. (1.0.0 and 1.0.1 both shipped as `versionCode` 1.)
 
 ## [1.0.1] and [1.0.0]

@@ -53,7 +53,7 @@ cd android
 
 CI runs all three, and a lint error fails the build (warnings, such as a newer library being available, do not). No device or emulator is needed for any of that. The screen tests run on the JVM with Robolectric, and the networking tests talk to a stand-in PC on `localhost` that speaks the real protocol, with real encryption.
 
-Things the tests cannot cover, so please try them on a phone if you change them: Bluetooth HID (many phones do not support the profile), the background-connection notification, the on-screen keyboard's behavior, haptics and discovery on a real network. Say in your pull request what you tried it on.
+Things the tests cannot cover, so please try them on a phone if you change them: Bluetooth HID (many phones do not support the profile), the background-connection notification, the on-screen keyboard's behavior, haptics and discovery on a real network. [docs/manual-testing.md](docs/manual-testing.md) is the checklist maintainers run before a release. Say in your pull request what you tried it on.
 
 #### Screenshots
 
@@ -65,6 +65,19 @@ Every screen has a picture in `android/app/src/test/screenshots`, rendered by `u
 ```
 
 Rendering can differ slightly between machines and operating systems, so CI does not compare pictures. Run `verifyRoborazziDebug` yourself before you record, to see that only the screens you meant to change are different.
+
+## The website and the brand
+
+The landing page is plain HTML, CSS and a little JavaScript in `website/`: no framework, no build step, and nothing loaded from other sites. It is served with a strict Content Security Policy (see `website/vercel.json`), so a stray inline style or external script will not work.
+
+```bash
+python3 website/tools/serve.py           # preview at http://127.0.0.1:8080, with the production headers
+python3 website/tools/build_images.py    # after re-recording the app screenshots
+docs/brand/export.sh                     # social images and icons, from their sources
+python3 docs/brand/build_logo.py         # the logo files (needs the Cal Sans font)
+```
+
+Keep the copy honest: say only what the app and the server really do. If a claim is not something a test or the code backs up, leave it out.
 
 ## Writing Android code
 
@@ -103,8 +116,12 @@ Rendering can differ slightly between machines and operating systems, so CI does
 
 Maintainers only. The Android app, the desktop server and the git tag all carry the same version, and the release workflow refuses to run if they differ.
 
-1. Set `versionName` in `android/app/build.gradle.kts` (the `versionCode` follows from it) and `version` in the root `Cargo.toml` to the new version, and run `cargo update --workspace` so that `Cargo.lock` agrees.
-2. Update [CHANGELOG.md](CHANGELOG.md).
-3. Merge, then tag the merge commit: `git tag v2.1.0 && git push origin v2.1.0`.
+```bash
+scripts/bump-version.sh 2.1.0   # sets the version in Cargo.toml, build.gradle.kts and Cargo.lock, and starts a changelog section
+# ... write the changelog section, commit ...
+scripts/release.sh 2.1.0        # checks, pushes main, waits for CI, tags, waits for the release build, checks the downloads
+```
 
-The workflow builds the signed APK and the Windows, Linux and macOS servers, and publishes them with a `SHA256SUMS` file. It needs the signing keystore in the repository's secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, and optionally `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`).
+`release.sh` asks before each step that cannot be undone (`--dry-run` shows what it would do). The changelog section for the version must be headed `## [2.1.0] - 2026-10-31` (version and date): the release workflow publishes it as the release notes, and the script dates it for you if it still says `Unreleased`.
+
+The workflow builds the signed APK and the Windows, Linux and macOS servers, and publishes them, each under a name with the version and a name without it (the website's download buttons use the latter), with a `SHA256SUMS` file. After it finishes, `release.sh` checks that every download link works and that the APK is signed with the same key as the previous release: a different key would stop phones from updating in place. The workflow needs the signing keystore in the repository's secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, and optionally `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`).

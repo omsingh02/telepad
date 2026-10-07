@@ -1,11 +1,20 @@
 <div align="center">
 
-# Telepad
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo-dark.svg">
+  <img src="docs/brand/logo.svg" alt="Telepad" width="300">
+</picture>
 
-Turn your phone into a trackpad, keyboard and media remote for Windows, Linux and macOS, over Wi-Fi or Bluetooth.
+**Your phone as a trackpad and keyboard for your computer.**
+
+Windows, Linux and macOS, over Wi-Fi or Bluetooth. Open source, end-to-end encrypted, no account.
+
+[**Website**](https://telepad-app.vercel.app) •
+[**Download**](https://github.com/omsingh02/telepad/releases) •
+[Changelog](CHANGELOG.md)
 
 [![CI Status](https://github.com/omsingh02/telepad/actions/workflows/ci.yml/badge.svg)](https://github.com/omsingh02/telepad/actions/workflows/ci.yml)
-[![Latest Release](https://img.shields.io/github/v/release/omsingh02/telepad?color=blue&label=release)](https://github.com/omsingh02/telepad/releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/omsingh02/telepad?include_prereleases&color=blue&label=release)](https://github.com/omsingh02/telepad/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Rust stable](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
 [![Android API 28+](https://img.shields.io/badge/android-API%2028%2B-green.svg)](https://developer.android.com)
@@ -59,12 +68,12 @@ Standalone pre-built binaries are available under [**Releases**](https://github.
 
 | Component | Target Platform | File |
 | :--- | :--- | :--- |
-| **Android Client** | Android 9.0+ (API 28+) | `telepad-android-<version>.apk` |
-| **Desktop Server** | Windows 10 / 11 (x86_64) | `telepad-server-<version>-windows-x86_64.exe` (or `.zip`) |
-| **Desktop Server** | Linux (x86_64, glibc 2.35+) | `telepad-server-<version>-linux-x86_64.tar.gz` |
-| **Desktop Server** | macOS 11+ (Apple silicon and Intel) | `telepad-server-<version>-macos-universal.tar.gz` |
+| **Android Client** | Android 9.0+ (API 28+) | `telepad-android.apk` |
+| **Desktop Server** | Windows 10 / 11 (x86_64) | `telepad-server-windows-x86_64.exe` (or `.zip`) |
+| **Desktop Server** | Linux (x86_64, glibc 2.35+) | `telepad-server-linux-x86_64.tar.gz` |
+| **Desktop Server** | macOS 11+ (Apple silicon and Intel) | `telepad-server-macos-universal.tar.gz` |
 
-Each server is a single portable executable with no external runtime dependencies. Checksums are published in `SHA256SUMS`.
+Each server is a single portable executable with no external runtime dependencies. Every file is also published with the version in its name (for example `telepad-android-v2.0.0.apk`), and all of them are listed with their SHA-256 in `SHA256SUMS`.
 
 ### Platform support
 
@@ -99,8 +108,8 @@ Each server is a single portable executable with no external runtime dependencie
 
 ### Keyboard
 - **Type with your phone's keyboard**: each edit is sent as it is made. Autocorrect and suggestions work, because the app works out the exact Backspaces and typing that give the PC the same text.
-- **Keys a phone lacks**: <kbd>Esc</kbd>, <kbd>Tab</kbd>, arrows, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>PgUp</kbd>, <kbd>PgDn</kbd>, <kbd>Del</kbd>, <kbd>Enter</kbd> and <kbd>F1</kbd>–<kbd>F12</kbd>. Hold a key and it repeats.
-- **Sticky modifiers**: <kbd>Ctrl</kbd>, <kbd>Alt</kbd>, <kbd>Shift</kbd> and <kbd>Win</kbd>/<kbd>⌘</kbd>/<kbd>Super</kbd>. Tap once for the next key, twice to lock, a third time to release.
+- **A full keyboard for keybinds**: letters, digits, punctuation, <kbd>F1</kbd>–<kbd>F12</kbd>, <kbd>Esc</kbd>, <kbd>Tab</kbd>, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>PgUp</kbd>, <kbd>PgDn</kbd>, <kbd>Ins</kbd>, <kbd>Del</kbd>, <kbd>PrtSc</kbd> and arrows. Every key goes down when touched and up when released, so holding one repeats.
+- **Modifiers that work like the real thing**: <kbd>Ctrl</kbd>, <kbd>Alt</kbd>, <kbd>Shift</kbd> and <kbd>Win</kbd>/<kbd>⌘</kbd>/<kbd>Super</kbd>. Hold one with a finger and tap keys with another (Super and 2). Or tap it once for the next key, twice to lock it, or hold it alone to press it by itself (Super opens a launcher).
 - **Shortcuts in the PC's own language**: Copy, Paste, Cut, Undo, Redo, Select all, Find, Save, New tab, Close tab, Refresh and Switch app, with the key names and combinations of the PC's operating system (<kbd>Ctrl+C</kbd> on Windows, <kbd>⌘C</kbd> on a Mac).
 - **Clipboard**: *Paste from phone* and *Copy from PC* (Wi-Fi). It is always a button press, never automatic.
 
@@ -445,6 +454,8 @@ telepad/
 │   │                           #   clipboard, network interfaces, config paths
 │   ├── telepad-crypto/         # Noise IK handshake, ChaCha20-Poly1305, key storage
 │   └── telepad-protocol/       # Binary wire protocol definitions and codecs
+├── website/                    # the landing page (plain HTML and CSS, served by Vercel)
+├── docs/                       # brand assets (logo, social image) and the manual test plan
 ├── .github/                    # CI and release workflows, issue and pull request templates
 ├── Cargo.toml                  # Cargo workspace
 ├── CHANGELOG.md                # what changed in each release
