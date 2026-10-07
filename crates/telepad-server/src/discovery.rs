@@ -1,6 +1,7 @@
 //! LAN discovery: answering probes, and announcing the server so phones find it
 //! without typing an address.
 
+use socket2::{Domain, Protocol, Socket, Type};
 use std::collections::HashSet;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
@@ -38,42 +39,96 @@ pub fn is_pong_echo(packet: &[u8]) -> bool {
     packet.first() == Some(&WIRE_DISCOVERY_REPLY) || packet.starts_with(PONG_PREFIX.as_bytes())
 }
 
-/// Every address an announcement is sent to: the global broadcast, the
-/// multicast group, and each local subnet's directed broadcast (which is what
-/// actually reaches a phone on a hotspot or a router that drops 255.255.255.255).
-pub fn announcement_targets(networks: &[LocalNetwork], port: u16) -> Vec<SocketAddr> {
-    let multicast: Ipv4Addr = TELEPAD_MULTICAST_GROUP
+fn multicast_group() -> Ipv4Addr {
+    TELEPAD_MULTICAST_GROUP
         .parse()
-        .expect("valid multicast constant");
-    let mut targets = vec![
-        SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::BROADCAST, port)),
-        SocketAddr::V4(SocketAddrV4::new(multicast, port)),
-    ];
-    for broadcast in networks.iter().filter_map(|n| n.broadcast) {
-        let target = SocketAddr::V4(SocketAddrV4::new(broadcast, port));
-        if !targets.contains(&target) {
-            targets.push(target);
-        }
-    }
-    targets
+        .expect("valid multicast constant")
 }
 
-/// One socket per local address, plus a wildcard fallback. Binding to each
-/// interface's own address forces broadcast frames out of that NIC; a single
-/// wildcard socket would send them only through whichever adapter the OS picks
-/// (often a virtual one).
-fn broadcast_sockets(networks: &[LocalNetwork]) -> Vec<std::net::UdpSocket> {
-    let mut addresses: Vec<Ipv4Addr> = networks.iter().map(|n| n.ip).collect();
-    addresses.push(Ipv4Addr::UNSPECIFIED);
+/// Where an announcement from `network` goes: that network's own directed
+/// broadcast (which reaches a phone on a hotspot, or behind a router that drops
+/// 255.255.255.255) and the discovery multicast group.
+///
+/// A network without a broadcast domain (a VPN such as Tailscale, a
+/// point-to-point link) gets nothing. No phone can hear a broadcast there, and
+/// a datagram sent from its address would leave through some *other* network
+/// (see [`announcer`]), telling phones the PC lives at an address they cannot
+/// reach, so the PC would show up a second time.
+pub fn announcement_targets(network: &LocalNetwork, port: u16) -> Vec<SocketAddr> {
+    let Some(broadcast) = network.broadcast else {
+        return Vec::new();
+    };
+    vec![
+        SocketAddr::V4(SocketAddrV4::new(broadcast, port)),
+        SocketAddr::V4(SocketAddrV4::new(multicast_group(), port)),
+    ]
+}
 
-    addresses
-        .into_iter()
-        .filter_map(|ip| {
-            let socket = std::net::UdpSocket::bind(SocketAddr::from((ip, 0))).ok()?;
-            socket.set_broadcast(true).ok()?;
-            socket.set_nonblocking(true).ok()?;
-            Some(socket)
+/// What to use when no network could be enumerated at all: the global
+/// broadcast and the multicast group, through whichever adapter the OS picks.
+pub fn fallback_targets(port: u16) -> Vec<SocketAddr> {
+    vec![
+        SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::BROADCAST, port)),
+        SocketAddr::V4(SocketAddrV4::new(multicast_group(), port)),
+    ]
+}
+
+/// The announcements to send: a source address and its targets, for each
+/// subnet that has a broadcast domain. A machine with two addresses on one
+/// subnet announces from the first only; two would show up as two PCs.
+pub fn announcement_plan(networks: &[LocalNetwork], port: u16) -> Vec<(Ipv4Addr, Vec<SocketAddr>)> {
+    let mut subnets = HashSet::new();
+    networks
+        .iter()
+        .filter_map(|network| {
+            let broadcast = network.broadcast?;
+            subnets
+                .insert(broadcast)
+                .then(|| (network.ip, announcement_targets(network, port)))
         })
+        .collect()
+}
+
+/// A socket that announces from one address, and what it sends to.
+struct Announcer {
+    socket: std::net::UdpSocket,
+    targets: Vec<SocketAddr>,
+}
+
+/// Builds the socket for one source address.
+///
+/// Binding a socket to an interface's address does not make it send through
+/// that interface: on Linux (and elsewhere) multicast and the global broadcast
+/// go out through the default route whichever address the socket is bound to,
+/// with that address as the sender. A PC with Tailscale or Docker would then
+/// announce itself from addresses that phones on the Wi-Fi cannot reach. So
+/// multicast is pinned to this address's interface, and everything else goes
+/// to the directed broadcast of this address's own subnet, which routes
+/// correctly by itself.
+fn announcer(source: Ipv4Addr, mut targets: Vec<SocketAddr>) -> Option<Announcer> {
+    let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).ok()?;
+    socket.set_broadcast(true).ok()?;
+    if socket.set_multicast_if_v4(&source).is_err() {
+        // The group could then leave through another network: send the broadcast only.
+        targets.retain(|target| !target.ip().is_multicast());
+    }
+    socket.bind(&SocketAddr::from((source, 0)).into()).ok()?;
+    socket.set_nonblocking(true).ok()?;
+    Some(Announcer {
+        socket: socket.into(),
+        targets,
+    })
+}
+
+fn build_announcers(networks: &[LocalNetwork], port: u16) -> Vec<Announcer> {
+    if networks.is_empty() {
+        return announcer(Ipv4Addr::UNSPECIFIED, fallback_targets(port))
+            .into_iter()
+            .collect();
+    }
+    announcement_plan(networks, port)
+        .into_iter()
+        .filter_map(|(source, targets)| announcer(source, targets))
         .collect()
 }
 
@@ -136,38 +191,47 @@ pub async fn run(socket: Arc<UdpSocket>, hostname: String, port: u16, interval: 
 
     let mut known_ips: Vec<Ipv4Addr> = Vec::new();
     let mut joined: HashSet<Ipv4Addr> = HashSet::new();
-    let mut sockets: Vec<std::net::UdpSocket> = Vec::new();
-    let mut targets: Vec<SocketAddr> = announcement_targets(&[], port);
+    let mut announcers: Vec<Announcer> = Vec::new();
 
     loop {
         ticker.tick().await;
 
         let networks = netif::local_ipv4_networks();
         let ips: Vec<Ipv4Addr> = networks.iter().map(|n| n.ip).collect();
-        if ips != known_ips || sockets.is_empty() {
-            if !networks.is_empty() {
+        if ips != known_ips || announcers.is_empty() {
+            if networks.is_empty() {
+                warn!("no usable network interface found; discovery will rely on probes only");
+            } else {
+                let announced: Vec<Ipv4Addr> = announcement_plan(&networks, port)
+                    .into_iter()
+                    .map(|(source, _)| source)
+                    .collect();
                 info!(
                     "Announcing on {}",
                     networks
                         .iter()
+                        .filter(|n| announced.contains(&n.ip))
                         .map(|n| format!("{}/{}", n.ip, n.prefix_len))
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
-            } else {
-                warn!("no usable network interface found; discovery will rely on probes only");
+                for network in networks.iter().filter(|n| !announced.contains(&n.ip)) {
+                    debug!(
+                        "not announcing from {}/{}: no separate broadcast domain",
+                        network.ip, network.prefix_len
+                    );
+                }
             }
             join_multicast(&socket, &networks, &mut joined);
-            sockets = broadcast_sockets(&networks);
-            targets = announcement_targets(&networks, port);
+            announcers = build_announcers(&networks, port);
             known_ips = ips;
         }
 
-        for socket in &sockets {
-            for target in &targets {
+        for announcer in &announcers {
+            for target in &announcer.targets {
                 // Best effort: an interface may be going away, or have no route.
-                let _ = socket.send_to(&tagged, target);
-                let _ = socket.send_to(&raw, target);
+                let _ = announcer.socket.send_to(&tagged, target);
+                let _ = announcer.socket.send_to(&raw, target);
             }
         }
     }
@@ -241,43 +305,103 @@ mod tests {
         assert!(!is_pong_echo(&[]));
     }
 
+    /// This machine as it is: Wi-Fi, a Tailscale address, a Docker bridge.
+    fn busy_machine() -> Vec<LocalNetwork> {
+        vec![
+            network([192, 168, 0, 108], 24, Some([192, 168, 0, 255])),
+            network([100, 95, 242, 28], 32, None),
+            network([172, 19, 0, 1], 16, Some([172, 19, 255, 255])),
+        ]
+    }
+
     #[test]
-    fn announcements_go_to_broadcast_multicast_and_every_subnet() {
-        let nets = [
-            network([192, 168, 1, 20], 24, Some([192, 168, 1, 255])),
-            network([10, 95, 31, 7], 24, Some([10, 95, 31, 255])),
-        ];
-        let targets = announcement_targets(&nets, 5000);
+    fn a_network_announces_to_its_own_subnet_and_the_group_only() {
+        let lan = network([192, 168, 1, 20], 24, Some([192, 168, 1, 255]));
         let expected: Vec<SocketAddr> = vec![
-            "255.255.255.255:5000".parse().unwrap(),
-            "239.255.42.67:5000".parse().unwrap(),
             "192.168.1.255:5000".parse().unwrap(),
-            "10.95.31.255:5000".parse().unwrap(),
+            "239.255.42.67:5000".parse().unwrap(),
         ];
-        assert_eq!(targets, expected);
+        assert_eq!(announcement_targets(&lan, 5000), expected);
     }
 
     #[test]
-    fn point_to_point_links_and_duplicates_add_no_extra_targets() {
-        let nets = [
-            network([10, 8, 0, 2], 32, None), // VPN: no broadcast domain
-            network([192, 168, 1, 20], 24, Some([192, 168, 1, 255])),
-            network([192, 168, 1, 21], 24, Some([192, 168, 1, 255])), // second address, same subnet
-        ];
-        let targets = announcement_targets(&nets, 6000);
-        assert_eq!(targets.len(), 3);
-        assert!(targets.contains(&"192.168.1.255:6000".parse().unwrap()));
+    fn a_network_without_a_broadcast_domain_announces_nothing() {
+        // A VPN such as Tailscale: a datagram "from" its address would leave through the
+        // Wi-Fi and tell phones the PC lives at an address they cannot reach.
+        let vpn = network([100, 95, 242, 28], 32, None);
+        assert!(announcement_targets(&vpn, 5000).is_empty());
     }
 
     #[test]
-    fn no_networks_still_yields_the_wildcard_targets() {
-        assert_eq!(announcement_targets(&[], 5000).len(), 2);
+    fn the_plan_skips_vpns_and_announces_once_per_subnet() {
+        let mut networks = busy_machine();
+        networks.push(network([192, 168, 0, 109], 24, Some([192, 168, 0, 255]))); // same Wi-Fi
+        let sources: Vec<Ipv4Addr> = announcement_plan(&networks, 5000)
+            .into_iter()
+            .map(|(source, _)| source)
+            .collect();
+        assert_eq!(
+            sources,
+            vec![
+                Ipv4Addr::new(192, 168, 0, 108),
+                Ipv4Addr::new(172, 19, 0, 1)
+            ]
+        );
+    }
+
+    #[test]
+    fn every_source_sends_only_to_its_own_subnet() {
+        // The global broadcast would leave through the default route with whatever
+        // address the socket is bound to; only a subnet's own broadcast is safe.
+        for (source, targets) in announcement_plan(&busy_machine(), 5000) {
+            let network = busy_machine().into_iter().find(|n| n.ip == source).unwrap();
+            for target in targets {
+                assert_ne!(target.ip(), Ipv4Addr::BROADCAST, "{source}");
+                if !target.ip().is_multicast() {
+                    assert_eq!(
+                        Some(target.ip()),
+                        network.broadcast.map(Into::into),
+                        "{source}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn no_networks_means_the_wildcard_fallback() {
+        assert!(announcement_plan(&[], 5000).is_empty());
+        let targets = fallback_targets(5000);
+        assert_eq!(targets.len(), 2);
+        assert!(targets.contains(&"255.255.255.255:5000".parse().unwrap()));
+        assert!(targets.contains(&"239.255.42.67:5000".parse().unwrap()));
     }
 
     #[test]
     fn announcement_port_follows_configuration() {
-        for target in announcement_targets(&[], 4242) {
+        for target in fallback_targets(4242) {
             assert_eq!(target.port(), 4242);
         }
+        let lan = network([192, 168, 1, 20], 24, Some([192, 168, 1, 255]));
+        for target in announcement_targets(&lan, 4242) {
+            assert_eq!(target.port(), 4242);
+        }
+    }
+
+    #[test]
+    fn an_announcer_sends_from_its_own_address() {
+        let listener = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        listener
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let target = listener.local_addr().unwrap();
+
+        let announcer = announcer(Ipv4Addr::LOCALHOST, vec![target]).expect("an announcer");
+        announcer.socket.send_to(b"hello", target).unwrap();
+
+        let mut buf = [0u8; 16];
+        let (len, from) = listener.recv_from(&mut buf).unwrap();
+        assert_eq!(&buf[..len], b"hello");
+        assert_eq!(from.ip(), Ipv4Addr::LOCALHOST);
     }
 }
