@@ -45,6 +45,8 @@ scripts/update-licenses.sh         # rewrites THIRD_PARTY_LICENSES.md from Cargo
 
 The release stops if `THIRD_PARTY_LICENSES.md` is out of date, because the desktop programs ship with it. A license that `deny.toml` does not list is for a person to decide on: say in the pull request why it is fine.
 
+The Linux packages and the one-line installer (`website/install.sh`) are tried in real Debian, Ubuntu, Fedora and Arch containers by `packaging/linux/tests/run.sh` and `installer.sh` (they need Docker; CI runs the first on every change). If you change either, run them.
+
 The desktop app writes a log file (see the README) that must never contain what a person typed or copied: log the *kind* of a message, never its content.
 
 To try the server without letting it move your real mouse, run it without input injection and with a scratch key directory:

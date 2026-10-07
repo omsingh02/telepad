@@ -6,8 +6,10 @@ How Telepad's desktop app becomes something a person can double-click. The relea
 | :--- | :--- | :--- |
 | `windows/telepad.iss` | `telepad-<tag>-windows-x86_64-setup.exe`: an Inno Setup installer. Per user (no administrator), Start menu entry, an uninstaller in Settings → Apps, and an option to start at sign-in. | Windows (Inno Setup 6 is on GitHub's runners) |
 | `macos/` | `Telepad.app` (`make-app.sh`), signed and notarized when Apple's credentials are present (`sign-and-notarize.sh`), in a disk image (`make-dmg.sh`) | `make-app.sh` anywhere; the others need a Mac |
-| `linux/` | `telepad-<tag>-linux-x86_64.tar.gz` (`package.sh`): the program, its icons, a desktop entry and `install.sh`, which installs into `~/.local` and removes it again with `--uninstall` | Linux (GNU tar) |
+| `linux/` | The Linux downloads. `build-packages.sh` makes a `.deb`, an `.rpm` and an Arch package from the one description in `nfpm.yaml` (they put Telepad in the applications menu and set up `/dev/uinput`: the udev rule and the module list). `package.sh` makes `telepad-<tag>-linux-x86_64.tar.gz`: the program, icons, a desktop entry and `install.sh`, which installs into `~/.local` and removes it again with `--uninstall`. `tests/` installs each package in real Debian, Ubuntu, Fedora and Arch (Docker) and tries the one-line installer against a stand-in for GitHub | Linux (nfpm, GNU tar, Docker for the tests) |
 | `icons/` | The icon in the formats each system wants, made from `docs/brand/icon.svg` by `make-icons.sh` | |
+
+**The one-line installer** (`curl -fsSL https://telepad-app.vercel.app/install.sh | sh`) is `website/install.sh`: it finds the newest release with a Linux download (a stable one if there is one), picks the package for the system (apt, dnf or zypper, pacman, or the plain download in `~/.local`), checks the file against the release's `SHA256SUMS`, installs it, and can remove it again (`--uninstall`). It is served from the website, so a change to it goes live with the next website deploy.
 
 The Windows program itself gets its icon and version information (the name shown in Task Manager's list of startup apps, and in SmartScreen) from `crates/telepad-tray/build.rs`.
 
@@ -16,8 +18,10 @@ The Windows program itself gets its icon and version information (the name shown
 ```bash
 cargo build --release --bin telepad
 
-# Linux
+# Linux: the tarball, and the .deb, .rpm and Arch packages (needs nfpm: github.com/goreleaser/nfpm/releases)
 packaging/linux/package.sh telepad-dev-linux-x86_64 target/release/telepad dist
+packaging/linux/build-packages.sh v0.0.0-dev telepad-dev-linux-x86_64 target/release/telepad dist
+packaging/linux/tests/run.sh dist 2.0.0                 # installs them in real distributions (needs Docker)
 # macOS (the version is numbers only)
 packaging/macos/make-app.sh 2.0.0 target/release/telepad dist/app
 packaging/macos/sign-and-notarize.sh app dist/app/Telepad.app     # ad hoc without credentials

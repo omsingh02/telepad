@@ -72,7 +72,7 @@ Pre-built files are under [**Releases**](https://github.com/omsingh02/telepad/re
 | **Your phone** | Android 9.0+ (API 28+) | `telepad-android.apk` |
 | **Your PC** | Windows 10 / 11 (x86_64) | `telepad-windows-x86_64-setup.exe` (installer), or `telepad-windows-x86_64.exe` to run without installing |
 | **Your PC** | macOS 11+ (Apple silicon and Intel) | `telepad-macos-universal.dmg` |
-| **Your PC** | Linux (x86_64, glibc 2.35+) | `telepad-linux-x86_64.tar.gz` (then `./install.sh`) |
+| **Your PC** | Linux (x86_64, glibc 2.34+) | `curl -fsSL https://telepad-app.vercel.app/install.sh \| sh`, or `telepad-linux-x86_64.deb` (Debian, Ubuntu, Mint), `.rpm` (Fedora, openSUSE), `.pkg.tar.zst` (Arch) or `.tar.gz` (then `./install.sh`) |
 | *Console server* | any of the above, no tray | `telepad-server-windows-x86_64.exe` (or `.zip`), `telepad-server-linux-x86_64.tar.gz`, `telepad-server-macos-universal.tar.gz` |
 
 Every file is also published with the version in its name (for example `telepad-android-v2.0.0.apk`). All of them are listed with their SHA-256 in `SHA256SUMS`, and each one has a [build attestation](#checking-a-download): a signed statement of which build, from which commit, produced it.
@@ -88,7 +88,7 @@ gh attestation verify telepad-android.apk --repo omsingh02/telepad   # and GitHu
 
 ### Updates
 
-Telepad never connects to the internet by itself, so it does not check for updates. New versions are on the [releases page](https://github.com/omsingh02/telepad/releases) (the tray page has an **Updates** link). To update, install the new file over the old one: the Windows installer and `install.sh` replace the running copy, and the phone app updates in place. To have the phone app updated for you, add this repository to [Obtainium](https://obtainium.imranr.dev) (**Add app**, paste `https://github.com/omsingh02/telepad`, and turn on *Include prereleases* while the releases are alphas). Settings and paired phones are kept across updates.
+Telepad never connects to the internet by itself, so it does not check for updates. New versions are on the [releases page](https://github.com/omsingh02/telepad/releases) (the tray page has an **Updates** link). To update, install the new file over the old one: the Windows installer and `install.sh` replace the running copy, on Linux the one command above (or `sudo apt install ./telepad-….deb`, `sudo dnf install ./telepad-….rpm`, `sudo pacman -U telepad-….pkg.tar.zst`) upgrades it, and the phone app updates in place. To have the phone app updated for you, add this repository to [Obtainium](https://obtainium.imranr.dev) (**Add app**, paste `https://github.com/omsingh02/telepad`, and turn on *Include prereleases* while the releases are alphas). Settings and paired phones are kept across updates.
 
 ### Platform support
 
@@ -298,8 +298,11 @@ The network code is tested end to end against a stand-in PC that speaks the real
 1. **Install Telepad on your PC** and open it:
    - **Windows:** run `telepad-windows-x86_64-setup.exe`. It installs for you only (no administrator prompt), adds Telepad to the Start menu, and offers to start it when you sign in.
    - **macOS:** open `telepad-macos-universal.dmg` and drag **Telepad** onto **Applications**, then open it. Allow the Accessibility request: without it macOS discards what the phone types and clicks.
-   - **Linux:** unpack `telepad-linux-x86_64.tar.gz` and run `./install.sh` (it installs into `~/.local`, no root needed), then open Telepad from your applications menu. Linux needs a one-time permission for `/dev/uinput` first: see [Linux](#linux).
-   - **Arch Linux:** build the package from this repository, which also sets up `/dev/uinput` for you: `git clone https://github.com/omsingh02/telepad && cd telepad/packaging/arch && makepkg -si`. (It is not on the AUR yet.)
+   - **Linux:** run one command, then open Telepad from your applications menu:
+     ```bash
+     curl -fsSL https://telepad-app.vercel.app/install.sh | sh
+     ```
+     It picks the right package for your system (a `.deb` on Debian, Ubuntu and Mint; an `.rpm` on Fedora and openSUSE; an Arch package on Arch and Manjaro; anywhere else it unpacks into your home folder), checks the download against the release's checksums, and sets up the permission Telepad needs to type, so there is nothing else to do. It says what it will do first and asks for your password only to install a system package. Prefer to download the file yourself? Every package is on the [releases page](https://github.com/omsingh02/telepad/releases); see [Linux](#linux).
 
    Telepad now sits in the tray, and the first time it opens a page with a **QR code** (click its icon, then **Pair a phone…**, to see it again).
 
@@ -373,7 +376,9 @@ Console commands: `pair [seconds]`, `qr [light]`, `close`, `list`, `forget`, `st
 
 ### Linux
 
-Telepad creates a virtual mouse and keyboard with the kernel's `uinput` interface, so it works under **Wayland and X11** alike. It needs permission to open `/dev/uinput`. Many desktops (and the Arch Linux package) grant this to the person at the computer already; if Telepad reports "permission denied", allow it once with the rule file that comes in the download (`60-telepad-uinput.rules`):
+**Installing.** The one command in the [Quick Start](#quick-start) is the easy way. The same packages can be installed by hand: `sudo apt install ./telepad-v….deb` (Debian, Ubuntu, Mint, Pop!_OS), `sudo dnf install ./telepad-v….rpm` (Fedora; `sudo zypper install ./telepad-v….rpm` on openSUSE), `sudo pacman -U telepad-v….pkg.tar.zst` (Arch, Manjaro, EndeavourOS). They are system packages: Telepad is in the applications menu with its icon, and your package manager updates and removes it (`sudo apt remove telepad`, `sudo dnf remove telepad`, `sudo pacman -R telepad`). `curl -fsSL https://telepad-app.vercel.app/install.sh | sh -s -- --uninstall` removes it however it was installed. Telepad needs a 64-bit PC and glibc 2.34 or newer (every mainstream distribution from 2022 on); Alpine, which uses musl, is not supported. Without a package manager's help, `telepad-linux-x86_64.tar.gz` unpacks anywhere and `./install.sh` puts it in `~/.local` with no password (`./install.sh --uninstall` removes it).
+
+**Typing needs a permission.** Telepad creates a virtual mouse and keyboard with the kernel's `uinput` interface, so it works under **Wayland and X11** alike, and it needs permission to open `/dev/uinput`. **The packages and the one command set this up for you.** If you unpacked the tarball yourself and Telepad reports "permission denied", allow it once with the rule file that comes in the download (`60-telepad-uinput.rules`):
 
 ```bash
 sudo modprobe uinput
