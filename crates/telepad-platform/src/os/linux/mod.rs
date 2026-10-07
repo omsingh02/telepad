@@ -237,13 +237,13 @@ fn explain_uinput_error(err: std::io::Error) -> PlatformError {
                 .into(),
         ),
         ErrorKind::PermissionDenied => PlatformError::Unavailable(
-            "Permission denied opening /dev/uinput, which Telepad needs to create a virtual mouse \
-             and keyboard.\nGrant your user access once:\n  \
-             echo 'KERNEL==\"uinput\", GROUP=\"input\", MODE=\"0660\", OPTIONS+=\"static_node=uinput\"' \
+            "Telepad cannot open /dev/uinput, which it needs to move the pointer and type.\n\
+             Installing Telepad from its .deb, .rpm or Arch package sets this up (so does the one-line \
+             installer on telepad-app.vercel.app). Or allow it once, with:\n  \
+             echo 'KERNEL==\"uinput\", SUBSYSTEM==\"misc\", OPTIONS+=\"static_node=uinput\", TAG+=\"uaccess\"' \
              | sudo tee /etc/udev/rules.d/60-telepad-uinput.rules\n  \
-             sudo udevadm control --reload && sudo udevadm trigger\n  \
-             sudo usermod -aG input \"$USER\"   # then log out and back in\n\
-             (or run the server as root, which is not recommended)."
+             sudo udevadm control --reload && sudo udevadm trigger\n\
+             and start Telepad again. (Running it as root also works, but is not recommended.)"
                 .into(),
         ),
         _ => PlatformError::Unavailable(format!("could not create uinput devices: {err}")),
@@ -707,7 +707,11 @@ mod tests {
             .to_string();
         assert!(msg.contains("/dev/uinput"));
         assert!(msg.contains("udev"));
-        assert!(msg.contains("input"));
+        assert!(
+            msg.contains("uaccess"),
+            "the rule that gives the person access: {msg}"
+        );
+        assert!(msg.contains(".deb"), "the packages that set it up: {msg}");
         let missing =
             explain_uinput_error(std::io::Error::from(std::io::ErrorKind::NotFound)).to_string();
         assert!(missing.contains("modprobe uinput"));

@@ -1,0 +1,95 @@
+# The .deb, .rpm and Arch packages, all made from this one description by nfpm (https://nfpm.goreleaser.com).
+# packaging/linux/build-packages.sh fills in the two placeholders below (@VERSION@, @BINARY@) and runs nfpm for each.
+#
+# What the packages do for the person: put Telepad in the applications menu with its icon, and set up the
+# permission it needs to type (/dev/uinput: the udev rule and the module list), so nobody opens a terminal for it.
+name: telepad
+arch: amd64
+platform: linux
+version: @VERSION@
+version_schema: semver
+section: utils
+priority: optional
+maintainer: Om Singh <omsingh02@users.noreply.github.com>
+vendor: Om Singh
+homepage: https://telepad-app.vercel.app
+license: MIT
+description: |
+  Your phone as a trackpad and keyboard for this computer.
+  Telepad sits in the tray and shows a QR code that the Telepad app on an
+  Android phone scans to pair. Then the phone is a trackpad, a keyboard and a
+  media remote for this computer, over your Wi-Fi, encrypted end to end, with
+  no account and nothing sent to any server.
+
+depends:
+  - libc6 (>= 2.34)
+  - libgcc-s1
+# Only suggested, never installed by itself: on GNOME the tray icon needs this extension, but it pulls in the whole
+# GNOME Shell, which nobody on KDE, XFCE or a server wants. (Ubuntu's GNOME has it already.)
+suggests:
+  - gnome-shell-extension-appindicator
+overrides:
+  rpm:
+    depends:
+      - glibc >= 2.34
+      - libgcc
+    suggests:
+      - gnome-shell-extension-appindicator
+  archlinux:
+    depends:
+      - glibc
+      - gcc-libs
+
+contents:
+  - src: @BINARY@
+    dst: /usr/bin/telepad
+    file_info:
+      mode: 0755
+  - src: packaging/linux/telepad.desktop
+    dst: /usr/share/applications/telepad.desktop
+  - src: docs/brand/icon.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/telepad.svg
+  - src: packaging/icons/telepad-16.png
+    dst: /usr/share/icons/hicolor/16x16/apps/telepad.png
+  - src: packaging/icons/telepad-24.png
+    dst: /usr/share/icons/hicolor/24x24/apps/telepad.png
+  - src: packaging/icons/telepad-32.png
+    dst: /usr/share/icons/hicolor/32x32/apps/telepad.png
+  - src: packaging/icons/telepad-48.png
+    dst: /usr/share/icons/hicolor/48x48/apps/telepad.png
+  - src: packaging/icons/telepad-64.png
+    dst: /usr/share/icons/hicolor/64x64/apps/telepad.png
+  - src: packaging/icons/telepad-128.png
+    dst: /usr/share/icons/hicolor/128x128/apps/telepad.png
+  - src: packaging/icons/telepad-256.png
+    dst: /usr/share/icons/hicolor/256x256/apps/telepad.png
+  - src: packaging/icons/telepad-512.png
+    dst: /usr/share/icons/hicolor/512x512/apps/telepad.png
+  # The virtual keyboard and mouse: the module at boot, and access for whoever is at the computer.
+  - src: packaging/linux/60-telepad-uinput.rules
+    dst: /usr/lib/udev/rules.d/60-telepad-uinput.rules
+  - src: packaging/linux/telepad-modules-load.conf
+    dst: /usr/lib/modules-load.d/telepad.conf
+  # Debian looks for the license in a file called "copyright"; the others keep it with the licenses.
+  - src: LICENSE
+    dst: /usr/share/doc/telepad/copyright
+    packager: deb
+  - src: THIRD_PARTY_LICENSES.md
+    dst: /usr/share/doc/telepad/THIRD_PARTY_LICENSES.md
+    packager: deb
+  - src: LICENSE
+    dst: /usr/share/licenses/telepad/LICENSE
+    packager: rpm
+  - src: THIRD_PARTY_LICENSES.md
+    dst: /usr/share/licenses/telepad/THIRD_PARTY_LICENSES.md
+    packager: rpm
+  - src: LICENSE
+    dst: /usr/share/licenses/telepad/LICENSE
+    packager: archlinux
+  - src: THIRD_PARTY_LICENSES.md
+    dst: /usr/share/licenses/telepad/THIRD_PARTY_LICENSES.md
+    packager: archlinux
+
+scripts:
+  postinstall: packaging/linux/scripts/postinstall.sh
+  postremove: packaging/linux/scripts/postremove.sh
