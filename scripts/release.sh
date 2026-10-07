@@ -167,7 +167,8 @@ fi
 check_links() {
   local failed=0 name code
   for name in telepad-android.apk \
-              telepad-windows-x86_64-setup.exe telepad-windows-x86_64.exe telepad-macos-universal.dmg telepad-linux-x86_64.tar.gz \
+              telepad-windows-x86_64-setup.exe telepad-windows-x86_64.exe telepad-macos-universal.dmg \
+              telepad-linux-x86_64.tar.gz telepad-linux-x86_64.deb telepad-linux-x86_64.rpm telepad-linux-x86_64.pkg.tar.zst \
               telepad-server-windows-x86_64.exe telepad-server-windows-x86_64.zip \
               telepad-server-linux-x86_64.tar.gz telepad-server-macos-universal.tar.gz SHA256SUMS; do
     code="$(curl -s -o /dev/null -w '%{http_code}' -L "$download_base/$name")"

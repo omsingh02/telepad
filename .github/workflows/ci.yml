@@ -39,6 +39,7 @@ jobs:
               - 'rust-toolchain.toml'
               - '.cargo/**'
               - 'packaging/**'
+              - 'website/install.sh'
               - '.github/workflows/ci.yml'
 
   android:
@@ -124,6 +125,22 @@ jobs:
           desktop-file-validate "$HOME/.local/share/applications/telepad.desktop"
           "$RUNNER_TEMP/unpacked/telepad-ci-linux-x86_64/install.sh" --uninstall
           test ! -e "$HOME/.local/bin/telepad"
+
+      # The .deb, .rpm and Arch packages: built, then installed in real Debian, Ubuntu, Fedora and Arch (containers),
+      # run, and removed; and the one-line installer (website/install.sh) tried the same way.
+      - name: Check the Linux system packages
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scripts/install-nfpm.sh 2.47.0
+          export PATH="$RUNNER_TEMP/nfpm:$PATH"
+          VERSION="$(sed -nE 's/^version = "([^"]+)".*/\1/p' Cargo.toml | head -n 1)"
+          bash packaging/linux/package.sh telepad-v0.0.0-linux-x86_64 target/release/telepad "$RUNNER_TEMP/packages"
+          bash packaging/linux/build-packages.sh v0.0.0 telepad-v0.0.0-linux-x86_64 target/release/telepad "$RUNNER_TEMP/packages"
+          bash packaging/linux/tests/run.sh "$RUNNER_TEMP/packages" "$VERSION"
+          # And the one-line installer, end to end against a stand-in for GitHub serving these files as a release.
+          bash packaging/linux/tests/installer.sh "$RUNNER_TEMP/packages" v0.0.0 "$VERSION"
 
       - name: Check the macOS package
         if: runner.os == 'macOS'

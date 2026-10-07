@@ -298,6 +298,11 @@ jobs:
       - name: Build the apps
         run: cargo build --release --locked --bin telepad --bin telepad-server
 
+      - name: Install nfpm
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/install-nfpm.sh 2.47.0
+
       - name: Package
         run: |
           mkdir -p dist
@@ -310,13 +315,26 @@ jobs:
           done
           bash packaging/linux/package.sh "telepad-${TAG}-linux-x86_64" target/release/telepad dist
           tar -czvf "dist/telepad-server-${TAG}-linux-x86_64.tar.gz" -C target/release telepad-server -C "$PWD" LICENSE THIRD_PARTY_LICENSES.md
+          # The .deb, .rpm and Arch packages, which set up the permission to type as well as installing the program.
+          bash packaging/linux/build-packages.sh "$TAG" "telepad-${TAG}-linux-x86_64" target/release/telepad dist
           ls -la dist
+
+      # Each package is installed in a real distribution of its kind, run, and removed, before it is published.
+      - name: Try the packages in real distributions
+        run: |
+          VERSION="${TAG#v}"
+          VERSION="${VERSION%%-*}"
+          bash packaging/linux/tests/run.sh dist "$VERSION"
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-linux
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+            dist/*.pkg.tar.zst
           retention-days: 7
 
   build-desktop-macos:
@@ -504,7 +522,7 @@ jobs:
           | An Android phone | `telepad-android.apk` |
           | A Windows PC | `telepad-windows-x86_64-setup.exe` (installer), or `telepad-windows-x86_64.exe` to run without installing |
           | A Mac | `telepad-macos-universal.dmg` |
-          | A Linux PC | `telepad-linux-x86_64.tar.gz`, then run `./install.sh` in the unpacked folder |
+          | A Linux PC | One command: `curl -fsSL https://telepad-app.vercel.app/install.sh \| sh` (it picks the right file below), or download `telepad-linux-x86_64.deb` (Debian, Ubuntu, Mint), `telepad-linux-x86_64.rpm` (Fedora, openSUSE), `telepad-linux-x86_64.pkg.tar.zst` (Arch) or `telepad-linux-x86_64.tar.gz` (anything else, then run `./install.sh`) |
 
           For a PC with no desktop, there is also a console-only server: `telepad-server-windows-x86_64.exe` (or `.zip`), `telepad-server-linux-x86_64.tar.gz` and `telepad-server-macos-universal.tar.gz`.
 
