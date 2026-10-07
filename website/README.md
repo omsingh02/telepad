@@ -4,6 +4,7 @@ A single static page: plain HTML, CSS and a little JavaScript. No framework, no 
 
 ```
 index.html            the page
+install.sh            the one-line installer for Linux (`curl -fsSL .../install.sh | sh`), served from here; see packaging/README.md
 404.html              the "not found" page
 assets/site.css       all the styling (dark by default, light with prefers-color-scheme)
 assets/site.js        scroll reveal, the screenshot strip's buttons, the "recommended for you" download
