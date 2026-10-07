@@ -24,7 +24,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snow = "0.9"
-sha2 = "0.10"
+sha2 = "0.11"
 base64 = "0.22"
 subtle = "2.6"
 rand = "0.8"
