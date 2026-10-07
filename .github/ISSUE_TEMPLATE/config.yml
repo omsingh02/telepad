@@ -3,3 +3,6 @@ contact_links:
   - name: Security problem
     url: https://github.com/omsingh02/telepad/security/advisories/new
     about: Please report vulnerabilities privately here, not as a public issue.
+  - name: A question, or help setting up
+    url: https://github.com/omsingh02/telepad/discussions
+    about: Ask here, so that the answer helps the next person too.
