@@ -71,6 +71,8 @@ import com.omsingh.telepad.ui.screens.settings.SettingsPage
 import com.omsingh.telepad.ui.screens.settings.SettingsViewModel
 import com.omsingh.telepad.ui.screens.settings.TouchpadSettingsScreen
 import com.omsingh.telepad.ui.theme.TelepadTheme
+import com.omsingh.telepad.update.UpdateState
+import com.omsingh.telepad.update.UpdateViewModel
 
 private enum class Tab(val icon: ImageVector, val label: Int) {
     DEVICES(Icons.Rounded.Computer, R.string.nav_devices),
@@ -92,6 +94,7 @@ fun TelepadRoot(
     settingsViewModel: SettingsViewModel,
     devicesViewModel: DevicesViewModel,
     remoteViewModel: RemoteViewModel,
+    updateViewModel: UpdateViewModel,
     startAtOnboarding: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -101,6 +104,9 @@ fun TelepadRoot(
     val preferences by settingsViewModel.preferences.collectAsStateWithLifecycle()
     val paired by settingsViewModel.pairedDevices.collectAsStateWithLifecycle()
     val remote by remoteViewModel.state.collectAsStateWithLifecycle()
+    val updates by updateViewModel.ui.collectAsStateWithLifecycle()
+    // A newer version is waiting: Settings wears a dot, and About says so.
+    val updateWaiting = updates.release != null && updates.state !is UpdateState.Installing
 
     val backStack by navController.currentBackStackEntryAsState()
     val destination = backStack?.destination
@@ -138,7 +144,7 @@ fun TelepadRoot(
                         NavigationRailItem(
                             selected = tab == item,
                             onClick = { navController.navigateToTab(item) },
-                            icon = { TabIcon(item, connected) },
+                            icon = { TabIcon(item, connected, updateWaiting) },
                             label = { Text(stringResource(item.label)) },
                         )
                     }
@@ -157,7 +163,7 @@ fun TelepadRoot(
                                 NavigationBarItem(
                                     selected = tab == item,
                                     onClick = { navController.navigateToTab(item) },
-                                    icon = { TabIcon(item, connected) },
+                                    icon = { TabIcon(item, connected, updateWaiting) },
                                     label = { Text(stringResource(item.label)) },
                                 )
                             }
@@ -205,6 +211,7 @@ fun TelepadRoot(
                     composable<Settings> {
                         SettingsHomeScreen(
                             actions = settingsViewModel,
+                            updateAvailable = updateWaiting,
                             onOpen = { page -> navController.navigate(SettingsDetail(page.name)) },
                         )
                     }
@@ -225,7 +232,12 @@ fun TelepadRoot(
                             SettingsPage.CONNECTION -> ConnectionSettingsScreen(preferences, settingsViewModel, back)
                             SettingsPage.APPEARANCE -> AppearanceSettingsScreen(preferences, settingsViewModel, back)
                             SettingsPage.PRIVACY -> PrivacySettingsScreen(paired, settingsViewModel, back)
-                            SettingsPage.ABOUT -> AboutScreen(back, onLicenses = { navController.navigate(Licenses) })
+                            SettingsPage.ABOUT -> AboutScreen(
+                                back,
+                                onLicenses = { navController.navigate(Licenses) },
+                                updates = updates,
+                                updateActions = updateViewModel,
+                            )
                         }
                     }
                 }
@@ -234,11 +246,18 @@ fun TelepadRoot(
     }
 }
 
-/** The Remote's icon wears a dot while connected, so the status is visible from anywhere. */
+/**
+ * The Remote's icon wears a dot while connected, so the status is visible from anywhere; Settings wears one
+ * while a newer version is waiting.
+ */
 @Composable
-private fun TabIcon(tab: Tab, connected: Boolean) {
+private fun TabIcon(tab: Tab, connected: Boolean, updateWaiting: Boolean) {
     if (tab == Tab.REMOTE && connected) {
         BadgedBox(badge = { Badge(containerColor = TelepadTheme.extended.success) }) {
+            Icon(tab.icon, contentDescription = null)
+        }
+    } else if (tab == Tab.SETTINGS && updateWaiting) {
+        BadgedBox(badge = { Badge() }) {
             Icon(tab.icon, contentDescription = null)
         }
     } else {

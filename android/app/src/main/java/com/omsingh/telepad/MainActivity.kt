@@ -29,6 +29,7 @@ import com.omsingh.telepad.ui.screens.devices.DevicesViewModel
 import com.omsingh.telepad.ui.screens.remote.RemoteViewModel
 import com.omsingh.telepad.ui.screens.settings.SettingsViewModel
 import com.omsingh.telepad.ui.theme.TelepadTheme
+import com.omsingh.telepad.update.UpdateViewModel
 
 /**
  * The only activity. It hosts the Compose UI and does what only an activity can: ask for
@@ -43,6 +44,7 @@ class MainActivity : ComponentActivity() {
     private val settings: SettingsViewModel by viewModels()
     private val devices: DevicesViewModel by viewModels()
     private val remote: RemoteViewModel by viewModels()
+    private val updates: UpdateViewModel by viewModels()
 
     private val manager by lazy { ConnectionManager.getInstance(application) }
 
@@ -82,6 +84,9 @@ class MainActivity : ComponentActivity() {
         override fun openAppSettings() =
             open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
 
+        override fun openInstallPermissionSettings() =
+            open(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.fromParts("package", packageName, null)))
+
         private fun open(intent: Intent) {
             try {
                 startActivity(intent)
@@ -118,6 +123,7 @@ class MainActivity : ComponentActivity() {
                             settingsViewModel = settings,
                             devicesViewModel = devices,
                             remoteViewModel = remote,
+                            updateViewModel = updates,
                             startAtOnboarding = !preferences.onboardingShown,
                         )
                     }

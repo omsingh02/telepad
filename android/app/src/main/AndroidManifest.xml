@@ -2,7 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Network: UDP to the PC. Nothing here reaches the internet. -->
+    <!-- Network: UDP to the PC. The internet is used for one thing: asking GitHub for the list of Telepad's
+         releases (and, when you tap Install, fetching one file), from Settings > About. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -21,6 +22,10 @@
     <!-- The camera, only to read the QR code on the PC's screen, and only while the scanner is open.
          It asks at that moment, with the reason on screen. Nothing is recorded or sent. -->
     <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Installing an update that Settings > About downloaded, when you tap Install. Android asks you to allow
+         it for Telepad separately, and checks that the new file is signed with the same key as this app. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Staying connected in the background (optional, off by default). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -70,6 +75,11 @@
             android:name=".service.TelepadConnectionService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <!-- The system installer's answer to an update (a question for the person, or how it ended). -->
+        <receiver
+            android:name=".update.InstallResultReceiver"
+            android:exported="false" />
 
     </application>
 

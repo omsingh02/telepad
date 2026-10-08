@@ -61,6 +61,8 @@ import com.omsingh.telepad.ui.components.SwitchRow
 import com.omsingh.telepad.ui.components.osIcon
 import com.omsingh.telepad.ui.theme.MonoStyle
 import com.omsingh.telepad.ui.theme.Spacing
+import com.omsingh.telepad.update.UpdateActions
+import com.omsingh.telepad.update.UpdateUi
 import com.omsingh.telepad.ui.theme.seed
 import com.omsingh.telepad.core.host.HostOs
 
@@ -332,7 +334,13 @@ private fun ConfirmDialog(title: String, body: String, confirm: String, onConfir
 // ── About ────────────────────────────────────────────────────────────
 
 @Composable
-fun AboutScreen(onBack: () -> Unit, onLicenses: () -> Unit, modifier: Modifier = Modifier) {
+fun AboutScreen(
+    onBack: () -> Unit,
+    onLicenses: () -> Unit,
+    modifier: Modifier = Modifier,
+    updates: UpdateUi = UpdateUi.None,
+    updateActions: UpdateActions = UpdateActions.None,
+) {
     val platform = LocalPlatformActions.current
     SettingsScaffold(title = stringResource(R.string.settings_about), onBack = onBack, modifier = modifier) {
         Column(
@@ -347,6 +355,7 @@ fun AboutScreen(onBack: () -> Unit, onLicenses: () -> Unit, modifier: Modifier =
             )
             Text(stringResource(R.string.about_tagline), style = MaterialTheme.typography.bodyLarge)
             Text(stringResource(R.string.about_license), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            UpdateSection(updates, updateActions)
             Button(onClick = { platform.openUrl(Links.REPOSITORY) }, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.about_github))
             }

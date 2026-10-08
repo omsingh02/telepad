@@ -21,6 +21,7 @@ class RecordingPlatform : PlatformActions {
     override fun openUrl(url: String) { calls += "open:$url" }
     override fun openBluetoothSettings() { calls += "bluetooth-settings" }
     override fun openAppSettings() { calls += "app-settings" }
+    override fun openInstallPermissionSettings() { calls += "install-permission-settings" }
 }
 
 /** Switches system animations off, as Developer options does, so that nothing loops. */

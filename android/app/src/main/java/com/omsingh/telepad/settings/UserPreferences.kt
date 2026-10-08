@@ -52,6 +52,13 @@ data class UserPreferences(
     // ── Feedback ─────────────────────────────────────────────────────
     val hapticFeedback: Boolean = true,
 
+    // ── Updates ──────────────────────────────────────────────────────
+    /**
+     * Look for a newer version on GitHub when the app opens, at most once a day. It is one request for the
+     * project's public list of releases; whether it is on by default is written down here, in one place.
+     */
+    val checkForUpdates: Boolean = true,
+
     // ── Onboarding & guides ──────────────────────────────────────────
     val onboardingShown: Boolean = false,
     val touchpadIntroShown: Boolean = false,

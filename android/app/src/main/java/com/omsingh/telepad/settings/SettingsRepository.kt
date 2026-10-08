@@ -65,6 +65,8 @@ class SettingsRepository(private val context: Context) {
         val ACCENT_COLOR = stringPreferencesKey("accent_color")
         // Feedback
         val HAPTIC = booleanPreferencesKey("haptic")
+        // Updates
+        val CHECK_FOR_UPDATES = booleanPreferencesKey("check_for_updates")
         // Onboarding & guides
         val ONBOARDING_SHOWN = booleanPreferencesKey("onboarding_shown")
         val TOUCHPAD_INTRO_SHOWN = booleanPreferencesKey("touchpad_intro_shown")
@@ -119,6 +121,7 @@ class SettingsRepository(private val context: Context) {
             dynamicColor = p[Keys.DYNAMIC_COLOR] ?: d.dynamicColor,
             accentColor = enumOf(p[Keys.ACCENT_COLOR], d.accentColor),
             hapticFeedback = p[Keys.HAPTIC] ?: d.hapticFeedback,
+            checkForUpdates = p[Keys.CHECK_FOR_UPDATES] ?: d.checkForUpdates,
             onboardingShown = p[Keys.ONBOARDING_SHOWN] ?: d.onboardingShown,
             touchpadIntroShown = p[Keys.TOUCHPAD_INTRO_SHOWN] ?: d.touchpadIntroShown,
         )
@@ -145,6 +148,7 @@ class SettingsRepository(private val context: Context) {
         p[Keys.DYNAMIC_COLOR] = u.dynamicColor
         p[Keys.ACCENT_COLOR] = u.accentColor.name
         p[Keys.HAPTIC] = u.hapticFeedback
+        p[Keys.CHECK_FOR_UPDATES] = u.checkForUpdates
         p[Keys.ONBOARDING_SHOWN] = u.onboardingShown
         p[Keys.TOUCHPAD_INTRO_SHOWN] = u.touchpadIntroShown
     }

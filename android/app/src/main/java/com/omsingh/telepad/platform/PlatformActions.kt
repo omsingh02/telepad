@@ -29,6 +29,9 @@ interface PlatformActions {
     /** Show the system's settings for this app (for a permission that was refused for good). */
     fun openAppSettings()
 
+    /** Show where Android lets this app install other apps' files, which it asks for once, per app. */
+    fun openInstallPermissionSettings()
+
     companion object {
         /** Does nothing; for previews and tests. */
         val None = object : PlatformActions {
@@ -38,6 +41,7 @@ interface PlatformActions {
             override fun openUrl(url: String) = Unit
             override fun openBluetoothSettings() = Unit
             override fun openAppSettings() = Unit
+            override fun openInstallPermissionSettings() = Unit
         }
     }
 }

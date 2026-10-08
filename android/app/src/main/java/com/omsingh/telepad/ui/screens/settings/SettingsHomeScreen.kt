@@ -29,6 +29,8 @@ fun SettingsHomeScreen(
     actions: SettingsActions,
     onOpen: (SettingsPage) -> Unit,
     modifier: Modifier = Modifier,
+    /** A newer version is waiting: About says so. */
+    updateAvailable: Boolean = false,
 ) {
     var confirmReset by remember { mutableStateOf(false) }
     SettingsScaffold(title = stringResource(R.string.settings_title), onBack = null, large = true, modifier = modifier) {
@@ -38,7 +40,12 @@ fun SettingsHomeScreen(
             NavigationRow(Icons.Rounded.Wifi, stringResource(R.string.settings_connection), stringResource(R.string.settings_connection_subtitle), { onOpen(SettingsPage.CONNECTION) })
             NavigationRow(Icons.Rounded.Palette, stringResource(R.string.settings_appearance), stringResource(R.string.settings_appearance_subtitle), { onOpen(SettingsPage.APPEARANCE) })
             NavigationRow(Icons.Rounded.Security, stringResource(R.string.settings_privacy), stringResource(R.string.settings_privacy_subtitle), { onOpen(SettingsPage.PRIVACY) })
-            NavigationRow(Icons.Rounded.Info, stringResource(R.string.settings_about), stringResource(R.string.settings_about_subtitle), { onOpen(SettingsPage.ABOUT) })
+            NavigationRow(
+                Icons.Rounded.Info,
+                stringResource(R.string.settings_about),
+                stringResource(if (updateAvailable) R.string.settings_about_update_available else R.string.settings_about_subtitle),
+                { onOpen(SettingsPage.ABOUT) },
+            )
             TextButton(onClick = { confirmReset = true }, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
                 Text(stringResource(R.string.settings_reset))
             }
