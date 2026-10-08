@@ -4,7 +4,7 @@
 #
 #   packaging/linux/tests/installer.sh <folder with the .deb, .rpm, .pkg.tar.zst and .tar.gz> <tag> <version>
 #
-#   packaging/linux/tests/installer.sh dist v2.0.0-alpha.2 2.0.0
+#   packaging/linux/tests/installer.sh dist v2.0.0-alpha.2 2.0.0-alpha.2
 #
 # <tag> is the release the files belong to (their names hold it), <version> what the program reports. It also checks
 # which release the installer picks: a stable one over a newer pre-release, and a pre-release when there is no stable
@@ -85,16 +85,17 @@ try fedora:latest rpm
 try archlinux:latest arch
 
 # 2. A stable release with Linux downloads wins over a newer pre-release.
-stable="v${version}"
+base="${version%%-*}"   # the release a pre-release is the run-up to
+stable="v${base}"
 if [ "$stable" != "$tag" ]; then
   make_release "$stable"
-  listing "v${version}-rc.9,true" "$stable,false" "$tag,true" > "$site/repos/x/releases"
+  listing "v${base}-rc.9,true" "$stable,false" "$tag,true" > "$site/repos/x/releases"
   echo "=== which release is picked when there is a stable one"
   picked="$(docker run --rm --network host \
       -e TELEPAD_API="http://127.0.0.1:$port/repos/x" -e TELEPAD_DOWNLOADS="http://127.0.0.1:$port/download" \
       --mount "type=bind,source=$repo/website/install.sh,target=/installer/install.sh,readonly" debian:12 \
       sh -c 'apt-get update -qq > /dev/null; apt-get install -y -qq curl ca-certificates > /dev/null 2>&1; sh /installer/install.sh --user 2>&1 | grep -o "Telepad [0-9.]* for Linux" | head -n 1')"
   echo "picked: $picked"
-  [ "$picked" = "Telepad $version for Linux" ] || { echo "FAILED: expected the stable release" >&2; failed=1; }
+  [ "$picked" = "Telepad $base for Linux" ] || { echo "FAILED: expected the stable release" >&2; failed=1; }
 fi
 exit "$failed"

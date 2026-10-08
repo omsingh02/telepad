@@ -1,6 +1,6 @@
 # Packaging
 
-How Telepad's desktop app becomes something a person can double-click. The release workflow (`.github/workflows/release.yml`) and CI (`.github/workflows/ci.yml`) both run these scripts, so what is tested is what ships. Signing is described in [docs/code-signing.md](../docs/code-signing.md).
+How Telepad's desktop app becomes something a person can double-click. One workflow (`.github/workflows/package.yml`) runs these scripts; CI calls it for every change and the release workflow calls it for every tag, so what is tested is what ships. Signing is described in [docs/code-signing.md](../docs/code-signing.md).
 
 | Folder | What it makes | Runs on |
 | :--- | :--- | :--- |

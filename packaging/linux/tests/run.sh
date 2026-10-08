@@ -34,8 +34,8 @@ try() {  # try <image> <script> <glob of the package>
   fi
   rm -r -- "$stage"
 }
-try debian:12 container-deb.sh '*.deb'
-try ubuntu:24.04 container-deb.sh '*.deb'
-try fedora:latest container-rpm.sh '*.rpm'
-try archlinux:latest container-arch.sh '*.pkg.tar.zst'
+try debian:12 container.sh '*.deb'
+try ubuntu:24.04 container.sh '*.deb'
+try fedora:latest container.sh '*.rpm'
+try archlinux:latest container.sh '*.pkg.tar.zst'
 exit "$failed"
