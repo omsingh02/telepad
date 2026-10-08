@@ -88,7 +88,20 @@ gh attestation verify telepad-android.apk --repo omsingh02/telepad   # and GitHu
 
 ### Updates
 
-Telepad never connects to the internet by itself, so it does not check for updates. New versions are on the [releases page](https://github.com/omsingh02/telepad/releases) (the tray page has an **Updates** link). To update, install the new file over the old one: the Windows installer and `install.sh` replace the running copy, on Linux the one command above (or `sudo apt install ./telepad-….deb`, `sudo dnf install ./telepad-….rpm`, `sudo pacman -U telepad-….pkg.tar.zst`) upgrades it, and the phone app updates in place. To have the phone app updated for you, add this repository to [Obtainium](https://obtainium.imranr.dev) (**Add app**, paste `https://github.com/omsingh02/telepad`, and turn on *Include prereleases* while the releases are alphas). Settings and paired phones are kept across updates.
+Telepad looks for a newer version when it starts and then once a day (the desktop app and the phone app each do), and says so: the tray menu offers **Update to 2.0.0-alpha.5…**, the page has a notice with an **Install and restart** button, and on the phone **Settings → About** shows the version with a dot on Settings. Nothing is installed until you press the button. It is one request for GitHub's public list of releases, which carries no identifier (see [PRIVACY.md](PRIVACY.md)); switch it off with *Looks for updates: off* in the page's footer or *Look for updates* in **Settings → About**, and use **Check for updates** whenever you like.
+
+What *Install* does depends on how that copy was installed. In every case the file is downloaded from the release and its SHA-256 is checked against the release's `SHA256SUMS` first; a file that does not match is thrown away.
+
+| Copy | What happens |
+| :--- | :--- |
+| Windows installer | Runs the new installer quietly (no administrator prompt), which quits Telepad, replaces it and starts it again. *Start at login* stays as you had it. |
+| macOS app | Opens the disk image, swaps the app in `/Applications` for the new one and starts it. (Until the app is notarized, macOS asks for the Accessibility permission again; Telepad says so.) |
+| Linux package | Asks your system for your password (the usual `pkexec` prompt), installs the matching `.deb`, `.rpm` or Arch package with your package manager, and starts Telepad again. If your system cannot ask, the page shows the one `sudo` command to run. |
+| Linux tarball in `~/.local` | Replaces the program file and starts it again; no password. |
+| Phone (Android) | Downloads the APK and hands it to Android's installer (Android asks you to allow Telepad to install apps once, and may ask you to confirm; it refuses an APK that is not signed with the same key). A copy installed by Google Play, F-Droid, Obtainium or another store is updated by that store, and Telepad only tells you. |
+| Anything else (Homebrew, a build from source, a program run from the Downloads folder) | Telepad tells you there is a new version and where to get it. |
+
+You can still update by hand: the Windows installer and `install.sh` replace the running copy, on Linux the one command above (or `sudo apt install ./telepad-….deb`, `sudo dnf install ./telepad-….rpm`, `sudo pacman -U telepad-….pkg.tar.zst`) upgrades it, and the phone app updates in place. To have the phone app updated by an update manager instead, add this repository to [Obtainium](https://obtainium.imranr.dev) (**Add app**, paste `https://github.com/omsingh02/telepad`, and turn on *Include prereleases* while the releases are alphas). Settings and paired phones are kept across updates. People on a final release are offered final releases only; people on an alpha are offered the next alpha and the final release. `telepad --check-update` looks and says what it found, without installing.
 
 ### Platform support
 
@@ -378,7 +391,7 @@ Console commands: `pair [seconds]`, `qr [light]`, `close`, `list`, `forget`, `st
 
 **Installing.** The one command in the [Quick Start](#quick-start) is the easy way. The same packages can be installed by hand: `sudo apt install ./telepad-v….deb` (Debian, Ubuntu, Mint, Pop!_OS), `sudo dnf install ./telepad-v….rpm` (Fedora; `sudo zypper install ./telepad-v….rpm` on openSUSE), `sudo pacman -U telepad-v….pkg.tar.zst` (Arch, Manjaro, EndeavourOS). They are system packages: Telepad is in the applications menu with its icon, and your package manager updates and removes it (`sudo apt remove telepad`, `sudo dnf remove telepad`, `sudo pacman -R telepad`). `curl -fsSL https://telepad-app.vercel.app/install.sh | sh -s -- --uninstall` removes it however it was installed. Telepad needs a 64-bit PC and glibc 2.34 or newer (every mainstream distribution from 2022 on); Alpine, which uses musl, is not supported. Without a package manager's help, `telepad-linux-x86_64.tar.gz` unpacks anywhere and `./install.sh` puts it in `~/.local` with no password (`./install.sh --uninstall` removes it).
 
-**Typing needs a permission.** Telepad creates a virtual mouse and keyboard with the kernel's `uinput` interface, so it works under **Wayland and X11** alike, and it needs permission to open `/dev/uinput`. **The packages and the one command set this up for you.** If you unpacked the tarball yourself and Telepad reports "permission denied", allow it once with the rule file that comes in the download (`60-telepad-uinput.rules`):
+**Typing needs a permission.** Telepad creates a virtual mouse and keyboard with the kernel's `uinput` interface, so it works under **Wayland and X11** alike, and it needs permission to open `/dev/uinput`. **The packages and the one command set this up for you.** If you unpacked the tarball yourself, Telepad starts anyway and asks: its page opens with a notice and an **Allow…** button (the tray menu has the same choice), your system asks for your password once, and typing works from then on, with no restart. The password prompt is your system's own (`pkexec`), and it shows exactly what will be run. If your system cannot show one, the page lists the same steps for a terminal. By hand, with the rule file that comes in the download (`60-telepad-uinput.rules`):
 
 ```bash
 sudo modprobe uinput
@@ -387,7 +400,7 @@ sudo install -m644 60-telepad-uinput.rules /etc/udev/rules.d/
 sudo udevadm control --reload && sudo udevadm trigger
 ```
 
-The rule gives access to whoever is logged in at the computer, and takes it away at log-out. (The older way, a group, works too: put `KERNEL=="uinput", GROUP="input", MODE="0660"` in a rules file and add yourself to `input`, then log out and in.)
+The rule gives access to whoever is logged in at the computer, and takes it away at log-out. (The older way, a group, works too: put `KERNEL=="uinput", GROUP="input", MODE="0660"` in a rules file and add yourself to `input`, then log out and in.) The console program `telepad-server` does not ask: it stops and prints these steps.
 
 - Run Telepad as your normal user, inside your desktop session. Launching programs, locking the screen and the clipboard all need that session.
 - **The tray icon** is a StatusNotifierItem, which KDE, Cinnamon, XFCE, MATE, Budgie and others show. **GNOME does not** unless you add the *AppIndicator and KStatusNotifierItem Support* extension. Without a tray, Telepad still works: it opens its page when you start it (and when you start it again, which is how to get back to the QR code and the Quit button). A start at login stays quiet.
@@ -395,12 +408,16 @@ The rule gives access to whoever is logged in at the computer, and takes it away
 - **Typing text** assumes a US-style layout for ASCII characters. Characters outside ASCII (accents, emoji, other scripts) are entered with the `Ctrl+Shift+U` Unicode sequence, which GTK applications and IBus support; some terminals and Qt apps do not. If your layout is not US-compatible (so "y" and "z" come out swapped, for example), start the server with `--text-via-unicode` to type every character that way instead. It works regardless of layout, but only in applications that accept the Unicode sequence.
 - **Quick actions** use what each desktop provides: `Super+D` (show desktop), `Super` (GNOME overview) or `Super+W` (KDE overview), `Print` (screenshot), `xdg-open` (browser and files), `loginctl lock-session` (with several fallbacks) and the first installed system monitor. GNOME and KDE are covered; other desktops may differ.
 - **Clipboard** uses the X11 clipboard (on Wayland, through XWayland). How well that is bridged on a pure-Wayland desktop varies; text typed from the phone does not depend on it.
-- Open the port if you use a firewall: `sudo ufw allow 5000/udp` or `sudo firewall-cmd --add-port=5000/udp --permanent && sudo firewall-cmd --reload`.
+- **A firewall has to let the phone in** (UDP port 5000), and some Linux systems have one switched on. The packages know the names, so it is one word: `sudo ufw allow Telepad` (ufw), or `sudo firewall-cmd --reload && sudo firewall-cmd --permanent --add-service=telepad && sudo firewall-cmd --reload` (firewalld, the default on Fedora and openSUSE). With hand-written nftables rules, add one to the `input` chain, before its final `drop` or `reject`:
+  ```
+  ip saddr 192.168.0.0/24 udp dport 5000 accept comment "telepad from the home network"
+  ```
+  (use your own network's addresses). **If a rule names an interface** (`iifname "wlp3s0"`), it covers that one only: a laptop that is on Ethernet at the moment needs `enp2s0` or whatever it is called as well, or the phone will say it cannot reach the PC while the Wi-Fi card sits idle.
 
 ### macOS
 
 - Open the `.dmg` and drag **Telepad** to **Applications**. It is a menu bar app: it has no Dock icon and no window, only an icon at the top of the screen. Open it again from Applications or Spotlight to see the QR code.
-- On first use macOS asks you to allow Telepad to control the computer. Enable it in **System Settings > Privacy & Security > Accessibility**. Without this, macOS silently discards every injected event. (When the app is not yet notarized, macOS forgets this permission after each update: allow it again. A notarized app keeps it.)
+- On first use macOS asks you to allow Telepad to control the computer. Enable it in **System Settings > Privacy & Security > Accessibility**. Without this, macOS silently discards every injected event, so Telepad does not leave it to chance: while the permission is missing, the menu bar menu starts with *Needs your permission to control this Mac* and has an **Allow Telepad to control this Mac…** item, and the page has a notice with a button that opens the Accessibility list. The notice goes away by itself once you have switched Telepad on. (When the app is not yet notarized, macOS forgets this permission after each update, and the notice comes back: allow it again. A notarized app keeps it.)
 - The download is not notarized yet (see [docs/code-signing.md](docs/code-signing.md)), so macOS says it cannot verify it. Open **System Settings > Privacy & Security**, scroll down, and choose **Open Anyway** once. From a terminal: `xattr -dr com.apple.quarantine /Applications/Telepad.app`. The same goes for the console server: `xattr -d com.apple.quarantine ./telepad-server`.
 - The phone's **Win** key acts as **⌘ Command** and **Alt** as **⌥ Option**, as with any PC keyboard on a Mac. To make Windows-style shortcuts work as they do on Windows, start the console server with `--mac-ctrl-as-cmd`, which makes the phone's Ctrl act as ⌘ (and Win as Control). The app already sends ⌘ shortcuts when it knows the PC is a Mac.
 - Allow incoming connections when macOS asks, or add the program in **Network > Firewall**. macOS may also ask to let Telepad find devices on the local network: allow it.
@@ -473,12 +490,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for more.
 ## Troubleshooting
 
 ### PC not found during auto-discovery
-1. **Firewall**: allow inbound UDP on port 5000.
+1. **Firewall**: allow inbound UDP on port 5000. When the phone says *Couldn't reach*, it now tells you whether the PC is on the same network as the phone (then it is almost certainly a firewall) or on another one (then it is the network).
    - Windows:
      ```powershell
      New-NetFirewallRule -DisplayName "Telepad Server" -Direction Inbound -LocalPort 5000 -Protocol UDP -Action Allow
      ```
-   - Linux: `sudo ufw allow 5000/udp` (or the `firewall-cmd` line above).
+   - Linux: `sudo ufw allow Telepad` (or `sudo ufw allow 5000/udp` without the package), the `firewall-cmd` line above, or an nftables rule (see [Linux](#linux), including the note about which interface a rule names).
    - macOS: click **Allow** on the "accept incoming network connections" prompt.
 2. **Access Point Isolation**: some guest Wi-Fi networks and mesh routers block device-to-device UDP traffic.
 3. **Manual IP Connection**: tap **Add device** in the app, choose **Address**, and enter your PC's local IP address (`ipconfig` on Windows, `ip addr` on Linux, `ipconfig getifaddr en0` on macOS). The app asks the PC for its name and key, so you still verify the fingerprint.
@@ -511,11 +528,11 @@ For more detail start the program with `--verbose` (the console server prints it
 ### "…hasn't accepted this phone"
 The PC refused the phone because it has not been paired. Scan the QR code from **Pair a phone…** in the tray menu (or type `pair` in the console server, or restart it with `--pair`) and tap **Try again**.
 
-### The server will not start on Linux ("permission denied" on /dev/uinput)
-Follow the [Linux setup](#linux). Use `--no-input` to run the protocol without injecting input, which is handy for diagnostics.
+### Linux: "Needs your permission to type and click" (or `telepad-server` stops with "permission denied" on /dev/uinput)
+Choose **Allow…** (on the page, or in the tray menu), or follow the [Linux setup](#linux). Use `--no-input` to run the protocol without injecting input, which is handy for diagnostics.
 
 ### Connected, but nothing moves on macOS
-macOS is discarding the events. Grant Accessibility access as described in [macOS](#macos).
+macOS is discarding the events. Telepad's menu says *Needs your permission to control this Mac* when that is the reason: choose **Allow Telepad to control this Mac…** and switch Telepad on, as described in [macOS](#macos).
 
 ### Cursor feels jittery, too slow or too fast
 - Open **Settings → Touchpad**: there is a pad at the top to try changes on right away. *Pointer speed* and *Acceleration* decide the feel. *None* moves the pointer in proportion to your finger at the chosen speed; *Fixed* is exactly 1:1 and ignores the speed setting.
@@ -540,8 +557,10 @@ telepad/
 ├── crates/                     # Rust Desktop Server Workspace
 │   ├── telepad-server/         # Tokio UDP server: discovery, pairing, invitations (QR), sessions, console
 │   ├── telepad-tray/           # the `telepad` app: tray icon, the page with the QR code, start at login
+│   ├── telepad-update/         # looks for a newer release on GitHub and installs it (Windows, macOS, Linux)
 │   ├── telepad-platform/       # OS layer: Windows SendInput, Linux uinput, macOS CoreGraphics,
-│   │                           #   clipboard, network interfaces, config paths, start at login
+│   │                           #   clipboard, network interfaces, config paths, start at login,
+│   │                           #   whether the system lets Telepad type, and asking it to
 │   ├── telepad-crypto/         # Noise IK handshake, ChaCha20-Poly1305, key storage
 │   └── telepad-protocol/       # Binary wire protocol definitions and codecs
 ├── packaging/                  # Windows installer, macOS app and disk image, Linux tarball, icons

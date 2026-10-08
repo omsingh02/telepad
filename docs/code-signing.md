@@ -116,3 +116,7 @@ xcrun stapler validate /Applications/Telepad.app
 ## What the workflow does without any of this
 
 It builds everything, signs the APK, gives every file a build attestation and a checksum, and says in the release notes which warnings to expect. Signing is purely additive: no step fails because a secret is missing.
+
+## Updates, and what signing would add
+
+The apps update themselves (see *Updates* in the README), and what protects that is: the program fetches only from this repository's GitHub releases over HTTPS; it installs nothing whose SHA-256 differs from the `SHA256SUMS` published with the release (on Linux the check is repeated by the privileged step, on the copy that is installed); and Android refuses an APK that is not signed with the app's own key. What that cannot cover is a release that is bad when it is *published*: the checksums and the files come from the same place. Code signing closes part of that gap on Windows and macOS (the system checks the publisher's signature when the installer or the app runs, and the updater can insist on it), and a signature over `SHA256SUMS` made with a key that is not kept in GitHub would close the rest. Neither is done yet; both are additive, and the updater needs no change to benefit from the first.
