@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+  <short>Telepad</short>
+  <description>Use your phone as a trackpad and keyboard for this computer. Telepad listens on UDP port 5000 for the phone.</description>
+  <port protocol="udp" port="5000"/>
+</service>

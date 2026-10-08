@@ -11,7 +11,7 @@ echo "installed: $(pacman -Q telepad)"
 
 [ "$(telepad --version)" = "telepad $expected" ] || fail "telepad --version says '$(telepad --version)', not 'telepad $expected'"
 for f in /usr/bin/telepad /usr/share/applications/telepad.desktop /usr/lib/udev/rules.d/60-telepad-uinput.rules \
-    /usr/lib/modules-load.d/telepad.conf /usr/share/licenses/telepad/LICENSE /usr/share/licenses/telepad/THIRD_PARTY_LICENSES.md \
+    /usr/lib/modules-load.d/telepad.conf /etc/ufw/applications.d/telepad /usr/lib/firewalld/services/telepad.xml /usr/share/licenses/telepad/LICENSE /usr/share/licenses/telepad/THIRD_PARTY_LICENSES.md \
     /usr/share/icons/hicolor/scalable/apps/telepad.svg /usr/share/icons/hicolor/48x48/apps/telepad.png; do
     [ -e "$f" ] || fail "$f is missing"
 done

@@ -37,9 +37,12 @@ Telepad: your phone as a trackpad and keyboard for this computer.
   ./install.sh              install for you (into ~/.local), no root needed
   ./install.sh --uninstall  remove it again
 
-If Telepad says it cannot open /dev/uinput, allow it once (needs root):
+The first time, Telepad asks for permission to type and click (a button on its page, "Allow..."; your system
+asks for your password once). To do it by hand instead, as root:
 
   sudo install -m644 60-telepad-uinput.rules /etc/udev/rules.d/
+  echo uinput | sudo tee /etc/modules-load.d/telepad.conf
+  sudo modprobe uinput
   sudo udevadm control --reload && sudo udevadm trigger
 
 Then open Telepad from your applications menu. Its first start shows a QR code: scan it with the Telepad

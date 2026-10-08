@@ -95,6 +95,10 @@ if [ "$(id -u)" -ne 0 ]; then
     if have sudo; then as_root="sudo"; elif have doas; then as_root="doas"; else can_root=0; fi
 fi
 
+# What to tell the person about the password: only when one will be asked for (not for root).
+asks=""
+if [ -n "$as_root" ]; then asks=" (it asks for your password)"; fi
+
 # The way to install: a package of this system's kind, or the plain download in ~/.local.
 method=tarball
 manager=""
@@ -120,13 +124,13 @@ if [ -x "${HOME:-/nonexistent}/.local/bin/telepad" ]; then in_home=1; fi
 if [ "$mode" = uninstall ]; then
     [ -n "$packaged" ] || [ "$in_home" = 1 ] || die "Telepad does not seem to be installed (no package, and no ~/.local/bin/telepad)"
     case "$packaged" in
-        deb) say "Removing the Telepad package (apt asks for your password)"; $as_root apt-get remove -y telepad ;;
+        deb) say "Removing the Telepad package$asks"; $as_root apt-get remove -y telepad ;;
         rpm)
-            say "Removing the Telepad package (this asks for your password)"
+            say "Removing the Telepad package$asks"
             if have dnf; then $as_root dnf remove -y telepad
             elif have zypper; then $as_root zypper --non-interactive remove telepad
             else $as_root yum remove -y telepad; fi ;;
-        arch) say "Removing the Telepad package (this asks for your password)"; $as_root pacman -R --noconfirm telepad ;;
+        arch) say "Removing the Telepad package$asks"; $as_root pacman -R --noconfirm telepad ;;
     esac
     if [ "$in_home" = 0 ]; then
         say "Telepad is removed. Your paired phones are kept in ~/.config/telepad; delete that folder to forget them."
@@ -185,7 +189,7 @@ if [ "$mode" = install ]; then
     case "$method" in
         tarball) note "It will be unpacked into ~/.local (your home folder): no password needed." ;;
         *)
-            note "It will be installed with $manager as a system package (it asks for your password),"
+            note "It will be installed with $manager as a system package$asks,"
             note "and it sets up the permission Telepad needs to type on this computer." ;;
     esac
 fi
@@ -241,7 +245,7 @@ case "$method" in
         if [ ! -w /dev/uinput ] && [ "$can_root" = 1 ]; then
             say "Telepad needs permission to type on this computer (/dev/uinput)"
             rules="$(ls "$tmp"/telepad-*/60-telepad-uinput.rules)"
-            note "This installs a small udev rule (the file $rules is in the download) and needs your password."
+            note "This installs a small udev rule (the file $rules is in the download)${asks:+ and needs your password}."
             answer=y
             # Asked on the terminal even when this script arrives through a pipe, if there is a terminal.
             if (: < /dev/tty) 2> /dev/null; then

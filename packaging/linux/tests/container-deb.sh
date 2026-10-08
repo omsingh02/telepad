@@ -26,6 +26,9 @@ grep -q uinput /usr/lib/modules-load.d/telepad.conf || fail "the module list doe
 grep -q 'TAG+="uaccess"' /usr/lib/udev/rules.d/60-telepad-uinput.rules || fail "the udev rule does not give the person access"
 apt-get install -y -qq desktop-file-utils > /dev/null 2>&1
 desktop-file-validate /usr/share/applications/telepad.desktop || fail "the desktop entry is not valid"
+[ -e /etc/ufw/applications.d/telepad ] || fail "the ufw profile is missing"
+apt-get install -y -qq ufw > /dev/null 2>&1
+ufw app info Telepad | grep -q '5000/udp' || fail "ufw does not know Telepad as 5000/udp"
 echo "dependencies: $(dpkg-query -W -f='${Depends}' telepad)"
 
 apt-get remove -y -qq telepad > /dev/null 2>&1

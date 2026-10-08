@@ -10,7 +10,7 @@ echo "installed: $(rpm -q --qf '%{NAME} %{VERSION} release %{RELEASE} %{ARCH}' t
 
 [ "$(telepad --version)" = "telepad $expected" ] || fail "telepad --version says '$(telepad --version)', not 'telepad $expected'"
 for f in /usr/bin/telepad /usr/share/applications/telepad.desktop /usr/lib/udev/rules.d/60-telepad-uinput.rules \
-    /usr/lib/modules-load.d/telepad.conf /usr/share/licenses/telepad/LICENSE /usr/share/licenses/telepad/THIRD_PARTY_LICENSES.md \
+    /usr/lib/modules-load.d/telepad.conf /etc/ufw/applications.d/telepad /usr/share/licenses/telepad/LICENSE /usr/share/licenses/telepad/THIRD_PARTY_LICENSES.md \
     /usr/share/icons/hicolor/scalable/apps/telepad.svg /usr/share/icons/hicolor/48x48/apps/telepad.png; do
     [ -e "$f" ] || fail "$f is missing"
 done
@@ -18,6 +18,9 @@ rpm -q --scripts telepad | grep -q udevadm || fail "the package does not tell ud
 echo "requires: $(rpm -q --requires telepad | grep -v -E '^(rpmlib|/bin/sh)' | tr '\n' ',')"
 dnf install -y -q desktop-file-utils > /dev/null 2>&1
 desktop-file-validate /usr/share/applications/telepad.desktop || fail "the desktop entry is not valid"
+[ -e /usr/lib/firewalld/services/telepad.xml ] || fail "the firewalld service is missing"
+dnf install -y -q firewalld > /dev/null 2>&1
+firewall-offline-cmd --info-service=telepad | grep -q '5000/udp' || fail "firewalld does not know Telepad as 5000/udp"
 
 dnf remove -y -q telepad > /dev/null 2>&1
 for f in /usr/bin/telepad /usr/lib/udev/rules.d/60-telepad-uinput.rules /usr/share/applications/telepad.desktop; do

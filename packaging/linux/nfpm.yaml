@@ -2,7 +2,8 @@
 # packaging/linux/build-packages.sh fills in the two placeholders below (@VERSION@, @BINARY@) and runs nfpm for each.
 #
 # What the packages do for the person: put Telepad in the applications menu with its icon, and set up the
-# permission it needs to type (/dev/uinput: the udev rule and the module list), so nobody opens a terminal for it.
+# permission it needs to type (/dev/uinput: the udev rule and the module list), so nobody opens a terminal for it, and
+# the names the two common firewalls need to let the phone in (ufw, firewalld).
 name: telepad
 arch: amd64
 platform: linux
@@ -24,10 +25,13 @@ description: |
 depends:
   - libc6 (>= 2.34)
   - libgcc-s1
-# Only suggested, never installed by itself: on GNOME the tray icon needs this extension, but it pulls in the whole
-# GNOME Shell, which nobody on KDE, XFCE or a server wants. (Ubuntu's GNOME has it already.)
+# Only suggested, never installed by itself. On GNOME the tray icon needs the extension, but it pulls in the whole
+# GNOME Shell, which nobody on KDE, XFCE or a server wants. (Ubuntu's GNOME has it already.) And installing an
+# update from the app asks for the password through polkit, which every desktop has; without it the app shows the
+# command to run instead.
 suggests:
   - gnome-shell-extension-appindicator
+  - pkexec | policykit-1
 overrides:
   rpm:
     depends:
@@ -35,10 +39,13 @@ overrides:
       - libgcc
     suggests:
       - gnome-shell-extension-appindicator
+      - polkit
   archlinux:
     depends:
       - glibc
       - gcc-libs
+    suggests:
+      - polkit
 
 contents:
   - src: @BINARY@
@@ -70,6 +77,13 @@ contents:
     dst: /usr/lib/udev/rules.d/60-telepad-uinput.rules
   - src: packaging/linux/telepad-modules-load.conf
     dst: /usr/lib/modules-load.d/telepad.conf
+  # The firewall, if there is one, is not opened for the person (that is theirs to decide), but it can be told in one
+  # word: `sudo ufw allow Telepad`, or `sudo firewall-cmd --permanent --add-service=telepad`.
+  - src: packaging/linux/ufw-telepad
+    dst: /etc/ufw/applications.d/telepad
+    type: config|noreplace
+  - src: packaging/linux/telepad-firewalld.xml
+    dst: /usr/lib/firewalld/services/telepad.xml
   # Debian looks for the license in a file called "copyright"; the others keep it with the licenses.
   - src: LICENSE
     dst: /usr/share/doc/telepad/copyright

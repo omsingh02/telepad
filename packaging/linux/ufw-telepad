@@ -1,0 +1,4 @@
+[Telepad]
+title=Telepad
+description=Use your phone as a trackpad and keyboard for this computer. Telepad listens on UDP port 5000 for the phone.
+ports=5000/udp

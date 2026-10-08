@@ -65,3 +65,4 @@ case ":$PATH:" in
   *) echo "(To run it by typing 'telepad', add $bin_dir to your PATH.)" ;;
 esac
 echo "Its first start shows a QR code: scan it with the Telepad app on your phone."
+echo "If your system needs it, Telepad asks once for permission to type and click (it will ask for your password)."
