@@ -106,6 +106,15 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Run Cargo Tests
         run: cargo test --workspace --locked --verbose
+
+      # A release builds the apps with their whole version in the environment (2.0.0-alpha.4, not only 2.0.0), and
+      # runs the tests that way before it builds. Run them that way here too, so that a test which only holds for
+      # the plain version fails in a pull request and not on the day of a release.
+      - name: Run Cargo Tests as a release does
+        if: runner.os == 'Linux'
+        env:
+          TELEPAD_RELEASE_VERSION: 2.0.0-alpha.99
+        run: cargo test --workspace --locked
       # CI is set, so on Windows a build that cannot embed the icon and version information fails.
       - name: Build the apps (release)
         run: cargo build --release --locked --bin telepad --bin telepad-server

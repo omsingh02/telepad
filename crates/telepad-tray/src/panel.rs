@@ -1163,7 +1163,7 @@ mod tests {
     #[test]
     fn the_page_has_the_places_the_script_fills_in_and_nothing_filled_in_by_the_server() {
         let fake = Fake::new();
-        fake.update.lock().unwrap().state = UpdateState::Available(found("2.0.0-alpha.4", true));
+        fake.update.lock().unwrap().state = UpdateState::Available(found("9.8.7-test.1", true));
         let page = body(&respond(&context(&fake), &get("/SECRET/")));
         for id in [
             "update",
@@ -1184,8 +1184,8 @@ mod tests {
             "hidden until the script has the state"
         );
         assert!(
-            !page.contains("2.0.0-alpha.4"),
-            "what was found reaches the page only as data, through the script"
+            !page.contains("9.8.7-test.1"),
+            "what was found reaches the page only as data, through the script (a version that no build is, since a release build puts its own version on the page)"
         );
     }
 
