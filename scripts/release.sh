@@ -2,7 +2,7 @@
 # Publishes a release of Telepad.
 #
 #   scripts/release.sh 2.1.0              checks everything, and asks before each step that cannot be undone
-#   scripts/release.sh 2.1.0-alpha.1      a pre-release: the app and server still say 2.1.0, only the tag differs
+#   scripts/release.sh 2.1.0-alpha.1      a pre-release: the code still says 2.1.0; the build is given the whole version (2.1.0-alpha.1)
 #   scripts/release.sh 2.1.0 --dry-run    shows what it would do, changes nothing
 #   scripts/release.sh 2.1.0 --yes        does not ask (only once you have read this script)
 #   scripts/release.sh 2.1.0 --skip-checks   leaves out the local tests (CI runs them anyway)

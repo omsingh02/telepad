@@ -13,7 +13,7 @@ Type with your phone's own keyboard (swipe typing, autocorrect and voice work), 
 Play, pause and volume, slide controls, and one-tap actions in the computer's own language: copy, paste, switch app, show desktop, lock the screen.
 
 <b>Private by design</b>
-Everything between your phone and your computer is encrypted end to end (the Noise protocol). The app has no account, no analytics, no ads and no tracking, and nothing leaves your own network. It is free and open source (MIT).
+Everything between your phone and your computer is encrypted end to end (the Noise protocol). The app has no account, no analytics, no ads and no tracking, and what you type goes only to your own computer. (The app asks GitHub once a day whether a newer version exists, and you can switch that off.) It is free and open source (MIT).
 
 <b>You need Telepad on the computer too</b>
 Get it for Windows, macOS and Linux at https://telepad-app.vercel.app. (Bluetooth mode needs nothing on the computer: the phone shows up as a Bluetooth keyboard and mouse.)

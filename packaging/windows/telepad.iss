@@ -74,6 +74,9 @@ Root: HKCU; Subkey: "{#RunKey}"; ValueType: string; ValueName: "{#AppName}"; Val
 [Run]
 ; The first start shows the page with the QR code. Not run by a silent install, which has nobody to show it to.
 Filename: "{app}\{#AppExe}"; Description: "Open Telepad and show the QR code"; Flags: nowait postinstall skipifsilent
+; An update that Telepad started itself (it passes /RELAUNCH=1) ends with the new program running again, quietly, as
+; the old one was.
+Filename: "{app}\{#AppExe}"; Parameters: "--background"; Flags: nowait skipifdoesntexist; Check: StartedByUpdate
 
 [Code]
 { Telepad has no window to ask to close, so it is asked to quit the way its own menu does. }
@@ -85,6 +88,12 @@ begin
   Exe := ExpandConstant('{app}\{#AppExe}');
   if FileExists(Exe) then
     Exec(Exe, '--quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+{ True when Telepad itself ran this installer to update, with /RELAUNCH=1 on the command line. }
+function StartedByUpdate(): Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;

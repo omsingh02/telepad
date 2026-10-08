@@ -98,6 +98,11 @@ jobs:
           printf "storeFile=app/release.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" \
             "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/keystore.properties
 
+      # The app says which release it is (2.0.0-alpha.4, not only 2.0.0), and the version code goes up with each alpha.
+      - name: Tell the build which release it is
+        shell: bash
+        run: echo "TELEPAD_RELEASE_VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
       - name: Test and Build Release APK
         working-directory: android
         env:
@@ -151,6 +156,11 @@ jobs:
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # The apps say which release they are (2.0.0-alpha.4, not only 2.0.0), which is what update checks compare.
+      - name: Tell the build which release it is
+        shell: bash
+        run: echo "TELEPAD_RELEASE_VERSION=${TAG#v}" >> "$GITHUB_ENV"
 
       - name: Run Cargo Tests (Release Test Gate)
         run: cargo test --workspace --locked --verbose
@@ -292,6 +302,11 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
+      # The apps say which release they are (2.0.0-alpha.4, not only 2.0.0), which is what update checks compare.
+      - name: Tell the build which release it is
+        shell: bash
+        run: echo "TELEPAD_RELEASE_VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
       - name: Run Cargo Tests (Release Test Gate)
         run: cargo test --workspace --locked --verbose
 
@@ -368,6 +383,11 @@ jobs:
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # The apps say which release they are (2.0.0-alpha.4, not only 2.0.0), which is what update checks compare.
+      - name: Tell the build which release it is
+        shell: bash
+        run: echo "TELEPAD_RELEASE_VERSION=${TAG#v}" >> "$GITHUB_ENV"
 
       - name: Run Cargo Tests (Release Test Gate)
         run: cargo test --workspace --locked --verbose

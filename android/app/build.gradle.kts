@@ -11,6 +11,30 @@ plugins {
     alias(libs.plugins.aboutlibraries)
 }
 
+/**
+ * Derived from the version, so that it can only go up when the version does: 2.1.3 is 210399, and the
+ * pre-releases of 2.1.3 come just below it (alpha.N is 210300 + N, beta.N 210340 + N, rc.N 210370 + N), so that
+ * Android accepts each alpha as an update of the one before, and the release as an update of them all.
+ */
+fun versionCodeOf(version: String): Int {
+    val core = version.substringBefore('-').split(".").map { it.toInt() }
+    val (major, minor, patch) = core
+    val pre = version.substringAfter('-', "")
+    val stage = if (pre.isEmpty()) {
+        99
+    } else {
+        val parts = pre.split(".")
+        val number = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        when (parts[0]) {
+            "alpha" -> number.coerceIn(0, 39)
+            "beta" -> 40 + number.coerceIn(0, 29)
+            "rc" -> 70 + number.coerceIn(0, 28)
+            else -> throw GradleException("Unknown pre-release kind \"${parts[0]}\" in $version (use alpha, beta or rc)")
+        }
+    }
+    return (major * 10_000 + minor * 100 + patch) * 100 + stage
+}
+
 android {
     namespace = "com.omsingh.telepad"
     compileSdk = 35
@@ -22,10 +46,16 @@ android {
         // One version for the whole project: the release tag and the server's Cargo version
         // must match it (the release workflow checks). Bump it here, in Cargo.toml and by tagging.
         versionName = "2.0.0"
-        // Derived, so it can only go up when the version does: 2.1.3 becomes 20103.
-        versionCode = versionName!!.split(".").let { (major, minor, patch) ->
-            major.toInt() * 10_000 + minor.toInt() * 100 + patch.toInt()
+        // The release workflow passes the whole tag (2.0.0-alpha.4) as TELEPAD_RELEASE_VERSION, so the app can tell
+        // one alpha from the next, which is how it knows whether a newer one exists.
+        val releaseVersion = System.getenv("TELEPAD_RELEASE_VERSION")?.takeIf { it.isNotBlank() }
+        if (releaseVersion != null) {
+            require(releaseVersion == versionName || releaseVersion.startsWith("$versionName-")) {
+                "TELEPAD_RELEASE_VERSION is $releaseVersion, but the app's version is $versionName"
+            }
+            versionName = releaseVersion
         }
+        versionCode = versionCodeOf(versionName!!)
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
