@@ -1,6 +1,6 @@
 [versions]
-agp = "8.7.0"
-kotlin = "2.0.20"
+agp = "8.7.3"
+kotlin = "2.0.21"
 
 coreKtx = "1.13.1"
 splashscreen = "1.0.1"
@@ -21,7 +21,7 @@ noiseJava = "49377b6dfc6a1e75740bce2318118291a57c0d6e"
 # The camera and the QR code reader behind "Scan QR code". Both are Apache 2.0 and need no Google
 # Play Services, so the app stays installable without them and eligible for F-Droid.
 camerax = "1.4.1"
-zxing = "3.5.3"
+zxing = "3.5.4"
 
 # The list of every library inside the app, with its license, shown under Settings, About. 11.2 is the line made for
 # the Android Gradle Plugin and Kotlin versions used here.
@@ -31,7 +31,7 @@ robolectric = "4.14.1"
 roborazzi = "1.30.1"
 
 junit = "4.13.2"
-mockk = "1.13.13"
+mockk = "1.13.17"
 androidxTestExt = "1.2.1"
 espressoCore = "3.6.1"
 
