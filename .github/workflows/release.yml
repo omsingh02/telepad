@@ -337,9 +337,8 @@ jobs:
       # Each package is installed in a real distribution of its kind, run, and removed, before it is published.
       - name: Try the packages in real distributions
         run: |
-          VERSION="${TAG#v}"
-          VERSION="${VERSION%%-*}"
-          bash packaging/linux/tests/run.sh dist "$VERSION"
+          # The program says its whole version (2.0.0-alpha.4), as the build was told to.
+          bash packaging/linux/tests/run.sh dist "${TAG#v}"
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
