@@ -42,21 +42,20 @@ make_release() {  # make_release <tag>
   done
   (cd "$site/download/$t" && sha256sum -- * > SHA256SUMS)
 }
-listing() {  # listing "tag,prerelease" ... in the shape GitHub's API answers with, newest first
-  local first=1 entry
-  printf '['
-  for entry in "$@"; do
-    [ "$first" = 1 ] || printf ','
-    first=0
-    printf '{"url":"x","tag_name":"%s","name":"Telepad %s","draft":false,"prerelease":%s,"assets":[{"name":"SHA256SUMS"}]}' "${entry%,*}" "${entry%,*}" "${entry#*,}"
+listing() {  # listing tag ... as the releases feed lists them, newest first
+  local tag
+  printf '<?xml version="1.0" encoding="UTF-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom">\n<title>Release notes from telepad</title>\n'
+  for tag in "$@"; do
+    # The notes carry a link to another release, escaped as GitHub writes it: it must not count as a release.
+    printf '<entry>\n<id>tag:github.com,2008:Repository/1/%s</id>\n<link rel="alternate" type="text/html" href="https://github.com/omsingh02/telepad/releases/tag/%s"/>\n<title>Telepad %s</title>\n<content type="html">&lt;a href=&quot;https://github.com/omsingh02/telepad/releases/tag/v9.9.9&quot;&gt;x&lt;/a&gt;</content>\n</entry>\n' "$tag" "$tag" "$tag"
   done
-  printf ']'
+  printf '</feed>\n'
 }
 
-# 1. Only the pre-release has Linux downloads (as now): the installer must take it, and not the stable v1.0.1.
+# 1. Only the pre-release has Linux downloads (as now): the installer must take it, and not the stable v1.0.1
+#    (which is in the feed, but has no Linux download).
 make_release "$tag"
-mkdir -p "$site/repos/x"
-listing "$tag,true" "v1.0.1,false" > "$site/repos/x/releases"
+listing "$tag" "v1.0.1" > "$site/feed.atom"
 
 python3 -u -m http.server 0 --bind 127.0.0.1 --directory "$site" > "$site/server.log" 2>&1 &
 server=$!
@@ -71,7 +70,7 @@ failed=0
 try() {  # try <image> <kind>
   echo "=== $1"
   if docker run --rm --network host \
-      -e TELEPAD_API="http://127.0.0.1:$port/repos/x" -e TELEPAD_DOWNLOADS="http://127.0.0.1:$port/download" \
+      -e TELEPAD_FEED="http://127.0.0.1:$port/feed.atom" -e TELEPAD_DOWNLOADS="http://127.0.0.1:$port/download" \
       --mount "type=bind,source=$repo/website/install.sh,target=/installer/install.sh,readonly" \
       --mount "type=bind,source=$here/container-installer.sh,target=/test.sh,readonly" \
       "$1" sh /test.sh "$version" "$2"; then :; else
@@ -89,10 +88,10 @@ base="${version%%-*}"   # the release a pre-release is the run-up to
 stable="v${base}"
 if [ "$stable" != "$tag" ]; then
   make_release "$stable"
-  listing "v${base}-rc.9,true" "$stable,false" "$tag,true" > "$site/repos/x/releases"
+  listing "v${base}-rc.9" "$stable" "$tag" > "$site/feed.atom"
   echo "=== which release is picked when there is a stable one"
   picked="$(docker run --rm --network host \
-      -e TELEPAD_API="http://127.0.0.1:$port/repos/x" -e TELEPAD_DOWNLOADS="http://127.0.0.1:$port/download" \
+      -e TELEPAD_FEED="http://127.0.0.1:$port/feed.atom" -e TELEPAD_DOWNLOADS="http://127.0.0.1:$port/download" \
       --mount "type=bind,source=$repo/website/install.sh,target=/installer/install.sh,readonly" debian:12 \
       sh -c 'apt-get update -qq > /dev/null; apt-get install -y -qq curl ca-certificates > /dev/null 2>&1; sh /installer/install.sh --user 2>&1 | grep -o "Telepad [0-9.]* for Linux" | head -n 1')"
   echo "picked: $picked"

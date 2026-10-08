@@ -20,7 +20,9 @@
 set -eu
 
 REPO="${TELEPAD_REPO:-omsingh02/telepad}"
-API="${TELEPAD_API:-https://api.github.com/repos/$REPO}"
+# The list of releases is the releases feed, an ordinary page of github.com. (GitHub's programming interface would also
+# do, but it allows an address only 60 requests an hour, which a campus or a mobile network shares between thousands.)
+FEED="${TELEPAD_FEED:-https://github.com/$REPO/releases.atom}"
 DOWNLOADS="${TELEPAD_DOWNLOADS:-https://github.com/$REPO/releases/download}"
 
 if [ -t 1 ]; then
@@ -146,18 +148,19 @@ if [ -n "$want" ]; then
     case "$want" in v*) tag="$want" ;; *) tag="v$want" ;; esac
 else
     say "Looking for the newest Telepad release"
-    listing="$(fetch_text "$API/releases?per_page=10")" || die "could not reach GitHub to see the releases (is the network up?)"
+    listing="$(fetch_text "$FEED")" || die "could not reach GitHub to see the releases (is the network up?)"
     stable=""
     preview=""
     # Newest first. A release counts only if it has the Linux download. A stable one is preferred; while there is
-    # none (Telepad's 2.0 releases are still alphas), the newest pre-release will do.
-    for entry in $(printf '%s' "$listing" | grep -o '"tag_name": *"[^"]*"\|"prerelease": *\(true\|false\)' \
-        | awk -F'"' '/tag_name/ { tag = $4 } /prerelease/ { print tag "," ($3 ~ /true/ ? "pre" : "stable") }'); do
-        candidate="${entry%,*}"
-        kind="${entry#*,}"
+    # none (Telepad's 2.0 releases are still alphas), the newest pre-release will do. (A release is a pre-release
+    # when its number has a hyphen: 2.0.0-alpha.4. The links inside a release's notes are written with &quot;, so
+    # only the link that is the release's own matches.)
+    for candidate in $(printf '%s' "$listing" | grep -o 'releases/tag/v[0-9][0-9A-Za-z.+-]*"' | sed 's|releases/tag/||; s|"$||'); do
         exists "$DOWNLOADS/$candidate/telepad-$candidate-linux-x86_64.tar.gz" || continue
-        if [ "$kind" = stable ]; then stable="$candidate"; break; fi
-        [ -n "$preview" ] || preview="$candidate"
+        case "$candidate" in
+            *-*) [ -n "$preview" ] || preview="$candidate" ;;
+            *) stable="$candidate"; break ;;
+        esac
     done
     tag="${stable:-$preview}"
     [ -n "$tag" ] || die "no Telepad release with a Linux download was found: see https://github.com/$REPO/releases"
