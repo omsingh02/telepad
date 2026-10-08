@@ -16,7 +16,8 @@ Thank you for wanting to help. Bug reports, ideas, documentation fixes and patch
 | `crates/telepad-crypto` | The Noise IK handshake, the replay window, key storage, fingerprints. |
 | `crates/telepad-platform` | The operating-system layer: Windows `SendInput`, Linux `uinput`, macOS CoreGraphics, clipboard, network interfaces, config paths. |
 | `crates/telepad-server` | The desktop server: discovery, pairing policy, invitations (QR codes), sessions, console. |
-| `crates/telepad-tray` | The `telepad` app: tray icon, the page with the QR code, start at login, one copy at a time, the log file. |
+| `crates/telepad-update` | Looks for a newer release (GitHub's release feed and the release's `SHA256SUMS`), downloads and checks it, and installs it the way that copy was installed. The Android app has its own version of the same in `update/`. |
+| `crates/telepad-tray` | The `telepad` app: tray icon, the page with the QR code, start at login, one copy at a time, the log file, the permission step and the update buttons. |
 | `packaging/` | The Windows installer, the macOS app and disk image, the Linux tarball, icons, and the package-manager manifests. See [packaging/README.md](packaging/README.md). |
 | `android/` | The Android app (Kotlin, Jetpack Compose). See the structure in the [README](README.md#android-app-structure). |
 
