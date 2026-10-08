@@ -17,6 +17,14 @@ updates:
     groups:
       rust-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # The Noise library and the random-number crate are a big step each (0.9 to 0.10, 0.8 to 0.10), in the code that
+      # makes the connection private. They are moved on purpose, with the end-to-end handshake tests watching, not by
+      # a bot. Remove a rule when that has been done.
+      - dependency-name: "snow"
+        versions: [">=0.10"]
+      - dependency-name: "rand"
+        versions: [">=0.9"]
 
   - package-ecosystem: gradle
     directory: /android
@@ -25,3 +33,10 @@ updates:
     groups:
       android-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # The Android Gradle Plugin, Gradle, Kotlin, the compile SDK and the androidx and test libraries that need them
+      # move together: the newest libraries ask for Kotlin 2.4, AGP 8.9 to 9 and compileSdk 36 or 37, and a bot cannot
+      # do that one pull request at a time. Until the toolchain is upgraded as one planned piece of work, only patch
+      # releases come from here (security fixes are not held back by this). Remove the rule after the upgrade.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
