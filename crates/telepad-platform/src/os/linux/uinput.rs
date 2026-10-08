@@ -168,6 +168,12 @@ pub(crate) fn encode_events(events: &[RawEvent]) -> Vec<u8> {
     buf
 }
 
+/// Whether `/dev/uinput` can be opened for writing, without making a device: what Telepad has to be allowed to do
+/// before it can type.
+pub(crate) fn can_open_uinput() -> io::Result<()> {
+    open_uinput().map(drop)
+}
+
 fn open_uinput() -> io::Result<File> {
     let mut last_err = None;
     for path in ["/dev/uinput", "/dev/input/uinput"] {

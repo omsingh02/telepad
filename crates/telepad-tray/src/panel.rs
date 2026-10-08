@@ -15,12 +15,15 @@
 //!  - a request that changes something (a POST) must come from this page, by its `Origin`;
 //!  - the page loads nothing from anywhere else and a strict content policy says so.
 
+use crate::setup;
 use qrcode::render::svg;
 use qrcode::{EcLevel, QrCode};
 use std::io;
 use std::sync::Arc;
 use telepad_crypto::{random_token, secrets_equal};
+use telepad_platform::access::Block;
 use telepad_server::Invite;
+use telepad_update::updater::State as UpdateState;
 
 const PAGE_CSS: &str = include_str!("panel/page.css");
 const PAGE_JS: &str = include_str!("panel/page.js");
@@ -32,7 +35,42 @@ pub trait Control: Send + Sync + 'static {
     fn status(&self) -> PanelStatus;
     fn autostart(&self) -> bool;
     fn set_autostart(&self, on: bool) -> Result<(), String>;
+    /// Whether the system is letting Telepad type and click, and how asking for it is going.
+    fn setup(&self) -> SetupView;
+    /// Starts asking the system for permission to type and click. It does not wait: the page watches [`Control::setup`].
+    fn allow(&self);
+    /// What is known about updates.
+    fn update(&self) -> UpdateView;
+    /// Looks for a newer Telepad. It does not wait: the page watches [`Control::update`].
+    fn check_for_updates(&self);
+    /// Installs the update that was found. It does not wait either.
+    fn install_update(&self);
+    /// Whether Telepad looks for updates by itself.
+    fn set_auto_update_check(&self, on: bool) -> Result<(), String>;
     fn quit(&self);
+}
+
+/// What the page says about updates.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateView {
+    /// The version that is running.
+    pub current: String,
+    pub state: UpdateState,
+    /// Whether Telepad looks by itself.
+    pub auto_check: bool,
+}
+
+/// What the page says about permission to type and click.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SetupView {
+    /// What is missing, or `None` when nothing is.
+    pub block: Option<Block>,
+    /// Asking right now: a password prompt may be open.
+    pub working: bool,
+    /// How the last attempt went.
+    pub note: Option<String>,
+    /// What the person can run in a terminal instead.
+    pub terminal: Option<String>,
 }
 
 /// What the page says about the server, and what it watches for.
@@ -247,6 +285,25 @@ fn respond(context: &Context, request: &Request) -> Reply {
             location: None,
         },
         (Method::Post, "new") => Reply::redirect(303, "./"),
+        (Method::Post, "allow") => {
+            context.control.allow();
+            Reply::text(204, "")
+        }
+        (Method::Post, "check-updates") => {
+            context.control.check_for_updates();
+            Reply::text(204, "")
+        }
+        (Method::Post, "install-update") => {
+            context.control.install_update();
+            Reply::text(204, "")
+        }
+        (Method::Post, "auto-updates") => {
+            let on = query.split('&').any(|pair| pair == "on=1");
+            match context.control.set_auto_update_check(on) {
+                Ok(()) => Reply::text(204, ""),
+                Err(message) => Reply::text(500, &message),
+            }
+        }
         (Method::Post, "autostart") => {
             let on = query.split('&').any(|pair| pair == "on=1");
             match context.control.set_autostart(on) {
@@ -284,12 +341,20 @@ impl Context {
 
     fn status_json(&self) -> Reply {
         let status = self.control.status();
+        let setup = self.control.setup();
+        let text = |value: &Option<String>| value.as_deref().map_or("null".to_owned(), json_string);
         Reply {
             status: 200,
             content_type: "application/json",
             body: format!(
-                "{{\"paired\":{},\"connected\":{}}}",
-                status.paired, status.connected
+                "{{\"paired\":{},\"connected\":{},\"blocked\":{},\"working\":{},\"note\":{},\"terminal\":{},\"update\":{}}}",
+                status.paired,
+                status.connected,
+                setup.block.is_some(),
+                setup.working,
+                text(&setup.note),
+                text(&setup.terminal),
+                update_json(&self.control.update()),
             )
             .into_bytes(),
             location: None,
@@ -317,7 +382,7 @@ impl Context {
                 .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join(" or "),
-            version: env!("CARGO_PKG_VERSION"),
+            version: telepad_protocol::RELEASE_VERSION,
             log_file: self.identity.log_file.as_deref(),
             name: &self.identity.name,
             fingerprint: &self.identity.fingerprint,
@@ -325,6 +390,7 @@ impl Context {
             paired: status.paired,
             connected: status.connected,
             autostart,
+            setup: self.control.setup(),
         }))
     }
 
@@ -368,6 +434,107 @@ struct PageData<'a> {
     paired: usize,
     connected: usize,
     autostart: bool,
+    setup: SetupView,
+}
+
+/// A JSON string: quoted, with what a string may not hold written out.
+fn json_string(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('"');
+    for c in text.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// What the page needs to know about updates, as JSON. Every string in it is shown with `textContent`, never as
+/// markup, and the one address (`page`) is checked again by the script before it is used.
+fn update_json(view: &UpdateView) -> String {
+    let text = |value: Option<&str>| value.map_or("null".to_owned(), json_string);
+    let mut phase = "unknown";
+    let mut message = None;
+    let mut how = None;
+    let mut declined = false;
+    let mut percent = None;
+    match &view.state {
+        UpdateState::Unknown => {}
+        UpdateState::Checking => phase = "checking",
+        UpdateState::UpToDate => phase = "up_to_date",
+        UpdateState::Available(_) => phase = "available",
+        UpdateState::Downloading { done, total, .. } => {
+            phase = "downloading";
+            percent = total
+                .filter(|total| *total > 0)
+                .map(|total| (done.min(&total) * 100 / total) as u8);
+        }
+        UpdateState::Installing(_) => phase = "installing",
+        UpdateState::Restarting(_) => phase = "restarting",
+        UpdateState::CheckFailed(why) => {
+            phase = "check_failed";
+            message = Some(why.as_str());
+        }
+        UpdateState::InstallFailed {
+            message: why,
+            how: steps,
+            declined: closed,
+            ..
+        } => {
+            phase = "install_failed";
+            message = Some(why.as_str());
+            how = steps.as_deref();
+            declined = *closed;
+        }
+    }
+    let found = view.state.update();
+    format!(
+        "{{\"phase\":{},\"current\":{},\"version\":{},\"page\":{},\"can_install\":{},\"by_hand\":{},\"percent\":{},\"message\":{},\"how\":{},\"declined\":{},\"auto\":{}}}",
+        json_string(phase),
+        json_string(&view.current),
+        text(found.map(|u| u.release.version.to_string()).as_deref()),
+        text(found.map(|u| u.release.page.as_str())),
+        found.is_some_and(|u| u.install.is_some()),
+        text(found.and_then(|u| u.by_hand.as_deref())),
+        percent.map_or("null".to_owned(), |p| p.to_string()),
+        text(message),
+        text(how),
+        declined,
+        view.auto_check,
+    )
+}
+
+/// The notice at the top of the page while the system is not letting Telepad type and click ("" otherwise).
+fn allow_notice(setup: &SetupView) -> String {
+    let Some(block) = setup.block else {
+        return String::new();
+    };
+    let words = setup::words(block);
+    let hidden = |shown: bool| if shown { "" } else { " hidden" };
+    format!(
+        "<section id=\"allow\" class=\"notice\" role=\"alert\">\n\
+<h2>{title}</h2>\n\
+<p>{body}</p>\n\
+<button type=\"button\" id=\"allow-button\"{disabled}>{button}</button>\n\
+<p id=\"allow-note\" class=\"hint\"{note_hidden}>{note}</p>\n\
+<pre id=\"allow-terminal\"{terminal_hidden}>{terminal}</pre>\n\
+</section>\n",
+        title = escape(words.title),
+        body = escape(words.body),
+        button = escape(words.button),
+        disabled = if setup.working { " disabled" } else { "" },
+        note_hidden = hidden(setup.note.is_some()),
+        note = escape(setup.note.as_deref().unwrap_or("")),
+        terminal_hidden = hidden(setup.terminal.is_some()),
+        terminal = escape(setup.terminal.as_deref().unwrap_or("")),
+    )
 }
 
 fn render_page(data: &PageData<'_>) -> String {
@@ -415,6 +582,16 @@ fn render_page(data: &PageData<'_>) -> String {
 <path d=\"M44,41L44,58L48.5,53.8L51.8,61L55,59.6L51.7,52.6L58,52.2Z\" fill=\"#38bdf8\"/></g></svg>\n\
 <h1>Pair a phone</h1>\n\
 </header>\n\
+{allow_notice}\
+<p id=\"allowed\" class=\"done\" hidden>&#10003; Allowed. Telepad can type and click now.</p>\n\
+<section id=\"update\" class=\"notice\" hidden>\n\
+<h2 id=\"update-title\"></h2>\n\
+<p id=\"update-text\"></p>\n\
+<progress id=\"update-progress\" max=\"100\" hidden></progress>\n\
+<button type=\"button\" id=\"update-button\" hidden>Install and restart</button>\n\
+<a id=\"update-link\" target=\"_blank\" rel=\"noreferrer noopener\" hidden>What changed</a>\n\
+<pre id=\"update-how\" hidden></pre>\n\
+</section>\n\
 <section id=\"code\" class=\"card\">\n\
 <div class=\"qr\" role=\"img\" aria-label=\"QR code for pairing a phone with {name}\">{qr}</div>\n\
 <p class=\"timer\">Good for <span id=\"countdown\">{clock}</span>, and for one phone.</p>\n\
@@ -439,17 +616,21 @@ fn render_page(data: &PageData<'_>) -> String {
 <p id=\"status\" class=\"status\">{status}</p>\n\
 <form method=\"post\" action=\"autostart?on={toggle_value}\"><button type=\"submit\" class=\"quiet\">{toggle_label}</button></form>\n\
 <form method=\"post\" action=\"quit\"><button type=\"submit\" class=\"quiet\">Quit Telepad</button></form>\n\
+<p id=\"update-line\" class=\"status\">Telepad {version}</p>\n\
+<button type=\"button\" id=\"check-updates\" class=\"quiet\">Check for updates</button>\n\
+<button type=\"button\" id=\"auto-updates\" class=\"quiet\">Looks for updates: on</button>\n\
 </footer>\n\
-<p class=\"links\"><a href=\"https://github.com/omsingh02/telepad/releases\" target=\"_blank\" rel=\"noreferrer noopener\">Updates</a> &middot; \
+<p class=\"links\"><a href=\"https://github.com/omsingh02/telepad/releases\" target=\"_blank\" rel=\"noreferrer noopener\">Releases</a> &middot; \
 <a href=\"https://github.com/omsingh02/telepad/issues/new/choose\" target=\"_blank\" rel=\"noreferrer noopener\">Report a problem</a> &middot; \
 <a href=\"https://github.com/omsingh02/telepad/blob/main/PRIVACY.md\" target=\"_blank\" rel=\"noreferrer noopener\">Privacy</a> &middot; \
 <a href=\"https://github.com/omsingh02/telepad/blob/main/THIRD_PARTY_LICENSES.md\" target=\"_blank\" rel=\"noreferrer noopener\">Licenses</a></p>\n\
 </main>\n\
-<div id=\"state\" data-paired=\"{paired}\" data-seconds=\"{seconds}\" hidden></div>\n\
+<div id=\"state\" data-paired=\"{paired}\" data-seconds=\"{seconds}\" data-blocked=\"{blocked}\" hidden></div>\n\
 <script src=\"app.js\"></script>\n\
 </body>\n\
 </html>\n",
         qr = data.qr_svg,
+        allow_notice = allow_notice(&data.setup),
         address_line = address_line,
         version = escape(data.version),
         log_line = data.log_file.map_or_else(String::new, |path| {
@@ -459,6 +640,7 @@ fn render_page(data: &PageData<'_>) -> String {
         fingerprint = escape(data.fingerprint),
         paired = data.paired,
         seconds = data.seconds,
+        blocked = u8::from(data.setup.block.is_some()),
     )
 }
 
@@ -504,6 +686,11 @@ mod tests {
         quit: AtomicBool,
         paired: AtomicUsize,
         failing_autostart: AtomicBool,
+        setup: Mutex<SetupView>,
+        allows: AtomicUsize,
+        update: Mutex<UpdateView>,
+        checks: AtomicUsize,
+        installs: AtomicUsize,
         names: Mutex<Vec<String>>,
         addresses: Mutex<Vec<std::net::Ipv4Addr>>,
     }
@@ -516,6 +703,15 @@ mod tests {
                 quit: AtomicBool::new(false),
                 paired: AtomicUsize::new(0),
                 failing_autostart: AtomicBool::new(false),
+                setup: Mutex::new(SetupView::default()),
+                allows: AtomicUsize::new(0),
+                update: Mutex::new(UpdateView {
+                    current: "2.0.0-alpha.3".into(),
+                    state: UpdateState::Unknown,
+                    auto_check: true,
+                }),
+                checks: AtomicUsize::new(0),
+                installs: AtomicUsize::new(0),
                 names: Mutex::new(Vec::new()),
                 addresses: Mutex::new(vec![
                     std::net::Ipv4Addr::new(192, 168, 1, 20),
@@ -549,6 +745,28 @@ mod tests {
                 return Err("the disk is full".into());
             }
             self.autostart.store(on, Ordering::SeqCst);
+            Ok(())
+        }
+        fn setup(&self) -> SetupView {
+            self.setup.lock().unwrap().clone()
+        }
+        fn allow(&self) {
+            self.allows.fetch_add(1, Ordering::SeqCst);
+        }
+        fn update(&self) -> UpdateView {
+            self.update.lock().unwrap().clone()
+        }
+        fn check_for_updates(&self) {
+            self.checks.fetch_add(1, Ordering::SeqCst);
+        }
+        fn install_update(&self) {
+            self.installs.fetch_add(1, Ordering::SeqCst);
+        }
+        fn set_auto_update_check(&self, on: bool) -> Result<(), String> {
+            if self.failing_autostart.load(Ordering::SeqCst) {
+                return Err("the disk is full".into());
+            }
+            self.update.lock().unwrap().auto_check = on;
             Ok(())
         }
         fn quit(&self) {
@@ -631,7 +849,7 @@ mod tests {
     fn the_page_says_which_version_this_is_where_the_log_is_and_where_to_get_help() {
         let fake = Fake::new();
         let page = body(&respond(&context(&fake), &get("/SECRET/")));
-        assert!(page.contains(&format!("Telepad {}", env!("CARGO_PKG_VERSION"))));
+        assert!(page.contains(&format!("Telepad {}", telepad_protocol::RELEASE_VERSION)));
         assert!(page.contains("log file: <code>/home/me/.config/telepad/telepad.log</code>"));
         for link in [
             "/releases\"",
@@ -677,7 +895,13 @@ mod tests {
         fake.paired.store(2, Ordering::SeqCst);
         let reply = respond(&context(&fake), &get("/SECRET/status.json"));
         assert_eq!(reply.content_type, "application/json");
-        assert_eq!(body(&reply), "{\"paired\":2,\"connected\":0}");
+        assert!(
+            body(&reply).starts_with(
+                "{\"paired\":2,\"connected\":0,\"blocked\":false,\"working\":false,\"note\":null,\"terminal\":null,\"update\":{"
+            ),
+            "{}",
+            body(&reply)
+        );
     }
 
     #[test]
@@ -711,6 +935,312 @@ mod tests {
         let ctx = context(&fake);
         assert!(body(&respond(&ctx, &get("/SECRET/app.js"))).contains("status.json"));
         assert!(body(&respond(&ctx, &get("/SECRET/app.css"))).contains("--accent"));
+    }
+
+    // ── Permission to type and click ─────────────────────────────────
+
+    fn blocked(block: Block) -> SetupView {
+        SetupView {
+            block: Some(block),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn when_nothing_is_missing_the_page_has_no_notice() {
+        let fake = Fake::new();
+        let page = body(&respond(&context(&fake), &get("/SECRET/")));
+        assert!(!page.contains("id=\"allow\""), "{page}");
+        assert!(!page.contains("allow-button"));
+        assert!(page.contains("data-blocked=\"0\""));
+    }
+
+    #[test]
+    fn when_the_system_is_not_letting_telepad_type_the_page_says_so_first_and_has_a_button() {
+        for (block, title, button) in [
+            (
+                Block::LinuxUinput,
+                "Allow Telepad to type and click",
+                "Allow…",
+            ),
+            (
+                Block::MacAccessibility,
+                "Allow Telepad to control this Mac",
+                "Open Accessibility settings",
+            ),
+        ] {
+            let fake = Fake::new();
+            *fake.setup.lock().unwrap() = blocked(block);
+            let page = body(&respond(&context(&fake), &get("/SECRET/")));
+            assert!(page.contains(title), "{page}");
+            assert!(page.contains(&format!(">{button}</button>")), "{page}");
+            assert!(page.contains("data-blocked=\"1\""));
+            assert!(
+                page.find("id=\"allow\"") < page.find("id=\"code\""),
+                "the notice is above the code"
+            );
+        }
+    }
+
+    #[test]
+    fn what_happened_and_what_to_type_by_hand_are_shown_and_cannot_inject() {
+        let fake = Fake::new();
+        *fake.setup.lock().unwrap() = SetupView {
+            block: Some(Block::LinuxUinput),
+            working: true,
+            note: Some("That did not work: <b>no</b>".into()),
+            terminal: Some("sudo sh -c 'echo \"hi\" > /x'".into()),
+        };
+        let page = body(&respond(&context(&fake), &get("/SECRET/")));
+        assert!(
+            page.contains("That did not work: &lt;b&gt;no&lt;/b&gt;"),
+            "{page}"
+        );
+        assert!(
+            page.contains("sudo sh -c &#39;echo &quot;hi&quot; &gt; /x&#39;"),
+            "{page}"
+        );
+        assert!(!page.contains("<b>no</b>"));
+        assert!(
+            page.contains("id=\"allow-button\" disabled"),
+            "asking: the button waits"
+        );
+    }
+
+    #[test]
+    fn the_status_carries_what_the_page_needs_to_follow_the_asking() {
+        let fake = Fake::new();
+        *fake.setup.lock().unwrap() = SetupView {
+            block: Some(Block::LinuxUinput),
+            working: true,
+            note: Some("line one\n\"two\"".into()),
+            terminal: None,
+        };
+        let json = body(&respond(&context(&fake), &get("/SECRET/status.json")));
+        assert!(
+            json.starts_with(
+                "{\"paired\":0,\"connected\":0,\"blocked\":true,\"working\":true,\"note\":\"line one\\n\\\"two\\\"\",\"terminal\":null,\"update\":{"
+            ),
+            "{json}"
+        );
+    }
+
+    #[test]
+    fn json_strings_are_escaped_whatever_they_hold() {
+        assert_eq!(json_string("plain"), "\"plain\"");
+        assert_eq!(json_string("a\"b\\c"), "\"a\\\"b\\\\c\"");
+        assert_eq!(json_string("1\n2\r3\t4"), "\"1\\n2\\r3\\t4\"");
+        assert_eq!(json_string("\u{1}"), "\"\\u0001\"");
+        assert_eq!(json_string("é✓"), "\"é✓\"");
+    }
+
+    #[test]
+    fn the_allow_button_asks_once_and_only_when_it_comes_from_the_page() {
+        let fake = Fake::new();
+        let ctx = context(&fake);
+        let reply = respond(&ctx, &post("/SECRET/allow"));
+        assert_eq!(reply.status, 204);
+        assert_eq!(fake.allows.load(Ordering::SeqCst), 1);
+
+        let mut elsewhere = post("/SECRET/allow");
+        elsewhere.origin = Some("http://evil.example".into());
+        assert_eq!(respond(&ctx, &elsewhere).status, 403);
+        assert_eq!(
+            respond(&ctx, &get("/SECRET/allow")).status,
+            404,
+            "asking is not a link to follow"
+        );
+        assert_eq!(fake.allows.load(Ordering::SeqCst), 1);
+    }
+
+    // ── Updates ──────────────────────────────────────────────────────
+
+    fn found(version: &str, installable: bool) -> telepad_update::fetch::Available {
+        use telepad_update::release::{Asset, Release, Source};
+        let release = Release::for_tag(&format!("v{version}"), &Source::github()).unwrap();
+        let asset = |name: &str| Asset {
+            name: name.into(),
+            size: 1,
+            url: String::new(),
+        };
+        telepad_update::fetch::Available {
+            release,
+            install: installable.then(|| telepad_update::fetch::Install {
+                asset: asset("telepad.deb"),
+                sums: asset("SHA256SUMS"),
+            }),
+            by_hand: (!installable).then(|| "Homebrew installed Telepad.".to_owned()),
+        }
+    }
+
+    fn update_json_of(fake: &Arc<Fake>) -> String {
+        let json = body(&respond(&context(fake), &get("/SECRET/status.json")));
+        json[json.find("\"update\":").unwrap() + 9..json.len() - 1].to_owned()
+    }
+
+    #[test]
+    fn nothing_known_about_updates_says_only_which_version_this_is() {
+        let fake = Fake::new();
+        assert_eq!(
+            update_json_of(&fake),
+            "{\"phase\":\"unknown\",\"current\":\"2.0.0-alpha.3\",\"version\":null,\"page\":null,\"can_install\":false,\"by_hand\":null,\"percent\":null,\"message\":null,\"how\":null,\"declined\":false,\"auto\":true}"
+        );
+    }
+
+    #[test]
+    fn an_update_that_can_be_installed_says_so_and_names_the_page() {
+        let fake = Fake::new();
+        fake.update.lock().unwrap().state = UpdateState::Available(found("2.0.0-alpha.4", true));
+        let json = update_json_of(&fake);
+        assert!(json.contains("\"phase\":\"available\""), "{json}");
+        assert!(json.contains("\"version\":\"2.0.0-alpha.4\""));
+        assert!(json.contains(
+            "\"page\":\"https://github.com/omsingh02/telepad/releases/tag/v2.0.0-alpha.4\""
+        ));
+        assert!(json.contains("\"can_install\":true"));
+        assert!(json.contains("\"by_hand\":null"));
+    }
+
+    #[test]
+    fn an_update_that_cannot_be_installed_here_says_why() {
+        let fake = Fake::new();
+        fake.update.lock().unwrap().state = UpdateState::Available(found("2.0.0-alpha.4", false));
+        let json = update_json_of(&fake);
+        assert!(json.contains("\"can_install\":false"), "{json}");
+        assert!(json.contains("\"by_hand\":\"Homebrew installed Telepad.\""));
+    }
+
+    #[test]
+    fn a_download_reports_how_far_it_is_and_never_more_than_all() {
+        let fake = Fake::new();
+        let downloading = |done, total| UpdateState::Downloading {
+            update: found("2.0.0-alpha.4", true),
+            done,
+            total,
+        };
+        for (done, total, expect) in [
+            (0, Some(200), "0"),
+            (50, Some(200), "25"),
+            (200, Some(200), "100"),
+            (999, Some(200), "100"),
+            (5, None, "null"),
+            (5, Some(0), "null"),
+        ] {
+            fake.update.lock().unwrap().state = downloading(done, total);
+            let json = update_json_of(&fake);
+            assert!(
+                json.contains(&format!("\"percent\":{expect},")),
+                "{done}/{total:?}: {json}"
+            );
+            assert!(json.contains("\"phase\":\"downloading\""));
+        }
+    }
+
+    #[test]
+    fn a_failure_carries_its_words_the_steps_for_by_hand_and_whether_the_person_just_said_no() {
+        let fake = Fake::new();
+        fake.update.lock().unwrap().state = UpdateState::InstallFailed {
+            update: found("2.0.0-alpha.4", true),
+            message: "It said \"no\".".into(),
+            how: Some("sudo apt-get install -y /tmp/x.deb".into()),
+            declined: true,
+        };
+        let json = update_json_of(&fake);
+        assert!(json.contains("\"phase\":\"install_failed\""), "{json}");
+        assert!(json.contains("\"message\":\"It said \\\"no\\\".\""));
+        assert!(json.contains("\"how\":\"sudo apt-get install -y /tmp/x.deb\""));
+        assert!(json.contains("\"declined\":true"));
+
+        fake.update.lock().unwrap().state = UpdateState::CheckFailed("GitHub is down".into());
+        let json = update_json_of(&fake);
+        assert!(
+            json.contains("\"phase\":\"check_failed\"")
+                && json.contains("\"message\":\"GitHub is down\""),
+            "{json}"
+        );
+    }
+
+    #[test]
+    fn the_page_has_the_places_the_script_fills_in_and_nothing_filled_in_by_the_server() {
+        let fake = Fake::new();
+        fake.update.lock().unwrap().state = UpdateState::Available(found("2.0.0-alpha.4", true));
+        let page = body(&respond(&context(&fake), &get("/SECRET/")));
+        for id in [
+            "update",
+            "update-title",
+            "update-text",
+            "update-progress",
+            "update-button",
+            "update-link",
+            "update-how",
+            "update-line",
+            "check-updates",
+            "auto-updates",
+        ] {
+            assert!(page.contains(&format!("id=\"{id}\"")), "{id}");
+        }
+        assert!(
+            page.contains("<section id=\"update\" class=\"notice\" hidden>"),
+            "hidden until the script has the state"
+        );
+        assert!(
+            !page.contains("2.0.0-alpha.4"),
+            "what was found reaches the page only as data, through the script"
+        );
+    }
+
+    #[test]
+    fn the_update_buttons_work_and_only_from_the_page() {
+        let fake = Fake::new();
+        let ctx = context(&fake);
+        assert_eq!(respond(&ctx, &post("/SECRET/check-updates")).status, 204);
+        assert_eq!(respond(&ctx, &post("/SECRET/install-update")).status, 204);
+        assert_eq!(
+            respond(&ctx, &post("/SECRET/auto-updates?on=0")).status,
+            204
+        );
+        assert_eq!(
+            (
+                fake.checks.load(Ordering::SeqCst),
+                fake.installs.load(Ordering::SeqCst)
+            ),
+            (1, 1)
+        );
+        assert!(!fake.update.lock().unwrap().auto_check);
+        assert_eq!(
+            respond(&ctx, &post("/SECRET/auto-updates?on=1")).status,
+            204
+        );
+        assert!(fake.update.lock().unwrap().auto_check);
+
+        fake.failing_autostart.store(true, Ordering::SeqCst);
+        assert_eq!(
+            respond(&ctx, &post("/SECRET/auto-updates?on=0")).status,
+            500
+        );
+
+        for path in [
+            "/SECRET/check-updates",
+            "/SECRET/install-update",
+            "/SECRET/auto-updates?on=0",
+        ] {
+            let mut elsewhere = post(path);
+            elsewhere.origin = Some("http://evil.example".into());
+            assert_eq!(respond(&ctx, &elsewhere).status, 403, "{path}");
+            assert_eq!(
+                respond(&ctx, &get(path)).status,
+                404,
+                "{path} is not a link to follow"
+            );
+        }
+        assert_eq!(
+            (
+                fake.checks.load(Ordering::SeqCst),
+                fake.installs.load(Ordering::SeqCst)
+            ),
+            (1, 1),
+            "nothing from elsewhere got through"
+        );
     }
 
     // ── Who may ask ──────────────────────────────────────────────────

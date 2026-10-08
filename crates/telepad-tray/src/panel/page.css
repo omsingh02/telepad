@@ -54,6 +54,31 @@ h1 { font-size: 1.5rem; margin: 0; letter-spacing: -0.01em; }
 .hint code { white-space: nowrap; }
 .done { color: var(--ok); font-weight: 600; font-size: 1.15rem; margin: 20px 0 0; }
 .expired { margin: 18px 0 0; color: var(--muted); }
+.notice {
+  text-align: left;
+  background: var(--card);
+  border: 2px solid var(--accent);
+  border-radius: 20px;
+  padding: 16px 20px 18px;
+  margin: 0 0 18px;
+}
+.notice h2 { font-size: 1.1rem; margin: 0 0 6px; }
+.notice p { margin: 6px 0 12px; }
+.notice .hint { margin: 12px 0 0; max-width: none; }
+.notice pre {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font: 0.8rem/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+progress { width: 100%; height: 10px; accent-color: var(--accent); margin: 4px 0 8px; }
+.notice a { color: var(--accent); margin-left: 10px; font-size: 0.92rem; }
+button:disabled { opacity: 0.6; cursor: progress; }
 [hidden] { display: none !important; }
 button {
   font: inherit;

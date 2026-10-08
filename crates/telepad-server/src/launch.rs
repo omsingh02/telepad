@@ -6,7 +6,8 @@ use crate::{Server, ServerConfig};
 use std::path::PathBuf;
 use telepad_platform::clipboard::{Clipboard, SystemClipboard};
 use telepad_platform::{
-    create_input_backend, paths, BackendOptions, InputBackend, RecordingBackend,
+    create_input_backend, create_input_backend_when_allowed, paths, BackendOptions, InputBackend,
+    RecordingBackend,
 };
 use telepad_protocol::TELEPAD_PORT;
 
@@ -15,6 +16,9 @@ use telepad_protocol::TELEPAD_PORT;
 pub enum Input {
     /// Into this computer, as a keyboard and mouse would.
     System(BackendOptions),
+    /// As `System`, but a computer that has not allowed it yet does not stop the server: input starts working
+    /// once it is allowed. For a program that can show the person what to do about it.
+    SystemWhenAllowed(BackendOptions),
     /// Nowhere: the protocol runs and input is dropped. For finding out what is wrong.
     Discard,
 }
@@ -67,6 +71,9 @@ pub async fn start(options: Options) -> Result<Server, String> {
         Input::System(backend) => create_input_backend(&backend).map_err(|e| {
             format!("{e}\n\n(Use --no-input to run without injecting input, for diagnostics.)")
         })?,
+        Input::SystemWhenAllowed(backend) => {
+            create_input_backend_when_allowed(&backend).map_err(|e| e.to_string())?
+        }
     };
 
     let mut config = ServerConfig::new(config_dir);

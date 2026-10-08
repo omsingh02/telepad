@@ -17,6 +17,7 @@ telepad-protocol = { path = "../telepad-protocol" }
 telepad-crypto = { path = "../telepad-crypto" }
 telepad-platform = { path = "../telepad-platform" }
 telepad-server = { path = "../telepad-server" }
+telepad-update = { path = "../telepad-update" }
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

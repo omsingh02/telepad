@@ -24,7 +24,7 @@ enum AutostartAction {
 #[derive(Parser, Debug)]
 #[command(
     name = "telepad-server",
-    version,
+    version = telepad_protocol::RELEASE_VERSION,
     about = "Desktop server for the Telepad app: lets your phone act as this computer's trackpad and keyboard"
 )]
 struct Cli {
@@ -221,7 +221,7 @@ async fn print_banner(server: &Server, handle: &ServerHandle, port: u16, interac
     println!("==================================================");
     println!(
         " Telepad Desktop Server v{} (Rust)",
-        env!("CARGO_PKG_VERSION")
+        telepad_protocol::RELEASE_VERSION
     );
     println!(" Port:        {port}");
     println!(" Hostname:    {}", server.hostname());

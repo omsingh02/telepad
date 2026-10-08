@@ -4,18 +4,25 @@
 use crate::fatal;
 use crate::instance;
 use crate::logging;
-use crate::panel::{Control, Identity, Panel, PanelStatus};
+use crate::panel::{Control, Identity, Panel, PanelStatus, SetupView, UpdateView};
+use crate::setup;
 use crate::status;
 use crate::tray::{self, Command, Commands, Menu};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
+use telepad_platform::access::{self, Block};
 use telepad_platform::autostart;
 use telepad_protocol::TELEPAD_PORT;
 use telepad_server::launch::{self, Input};
 use telepad_server::pairing::DEFAULT_INVITATION_TTL;
 use telepad_server::{Invite, ServerHandle};
+use telepad_update::net::{Github, Http};
+use telepad_update::release::Source;
+use telepad_update::system::{self, Commands as RunCommands, System};
+use telepad_update::updater::{Config as UpdateConfig, State as UpdateState, Updater};
+use telepad_update::version::Version;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
@@ -26,13 +33,18 @@ const MENU_REFRESH: Duration = Duration::from_secs(2);
 /// How long to wait for the server to let go of held keys before quitting regardless.
 const SHUTDOWN_PATIENCE: Duration = Duration::from_secs(3);
 
+/// How long after starting Telepad first looks for a newer version, and how often it looks after that. The wait
+/// keeps the check out of the way of everything a start at login is busy with.
+const FIRST_LOOK_AFTER: Duration = Duration::from_secs(20);
+const LOOK_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
+
 /// What Telepad is started with at login: quietly, so that no page opens by itself.
 const AT_LOGIN: &[&str] = &["--background"];
 
 #[derive(clap::Parser, Debug)]
 #[command(
     name = "telepad",
-    version,
+    version = telepad_protocol::RELEASE_VERSION,
     about = "Telepad: your phone as a trackpad and keyboard for this computer, from the tray"
 )]
 pub struct Cli {
@@ -64,6 +76,10 @@ pub struct Cli {
     /// Ask the Telepad that is running to quit, wait until it has, and exit (for installers and scripts)
     #[arg(long)]
     pub quit: bool,
+
+    /// Look for a newer Telepad, say what was found, and exit
+    #[arg(long)]
+    pub check_update: bool,
 }
 
 pub fn run(cli: Cli) -> Result<(), String> {
@@ -71,6 +87,10 @@ pub fn run(cli: Cli) -> Result<(), String> {
         .key_dir
         .clone()
         .unwrap_or_else(telepad_platform::paths::default_config_dir);
+
+    if cli.check_update {
+        return check_update(&config_dir);
+    }
 
     // Starting Telepad again is how it is opened again (the Start menu, Spotlight, the launcher), so when one is
     // running already, show its page rather than fight it for the port.
@@ -111,7 +131,7 @@ pub fn run(cli: Cli) -> Result<(), String> {
 
     info!(
         "Telepad {} starting on {} ({})",
-        env!("CARGO_PKG_VERSION"),
+        telepad_protocol::RELEASE_VERSION,
         std::env::consts::OS,
         std::env::consts::ARCH
     );
@@ -132,7 +152,8 @@ pub fn run(cli: Cli) -> Result<(), String> {
         input: if cli.no_input {
             Input::Discard
         } else {
-            Input::System(Default::default())
+            // A computer that has not let Telepad type yet still gets the program, with a way to allow it.
+            Input::SystemWhenAllowed(Default::default())
         },
         ..launch::Options::new()
     }))?;
@@ -143,6 +164,8 @@ pub fn run(cli: Cli) -> Result<(), String> {
     };
     let handle = server.handle();
     let first_run = runtime.block_on(handle.status()).paired_devices == 0;
+    let checks_input = !cli.no_input;
+    let blocked_at_start = checks_input && access::input_blocked().is_some();
 
     let stop_server = Arc::new(Notify::new());
     let stopping = Arc::clone(&stop_server);
@@ -153,12 +176,20 @@ pub fn run(cli: Cli) -> Result<(), String> {
         server: handle,
         config_dir,
         stop_server,
+        checks_input,
+        allowing: Mutex::new(setup::Progress::default()),
         serving: Mutex::new(Some(serving)),
         ui: Mutex::new(None),
         page: Mutex::new(None),
         opened_at_start: AtomicBool::new(false),
         quitting: AtomicBool::new(false),
+        updater: OnceLock::new(),
     });
+    let restart = Arc::downgrade(&shared);
+    let _ = shared
+        .updater
+        .set(make_updater(&shared.config_dir, restart, || {}));
+    shared.updater().look_regularly();
 
     // 2. The page with the QR code, which lives as long as the program does.
     let panel = match Panel::start(Arc::new(Controls(Arc::clone(&shared))), identity) {
@@ -211,7 +242,14 @@ pub fn run(cli: Cli) -> Result<(), String> {
     };
     let ready = {
         let shared = Arc::clone(&shared);
-        move |ui: tray::Handle| shared.tray_is_up(ui, first_run && !cli.no_open && !cli.background)
+        // The page opens by itself when the code is the first thing wanted, or when the system is not letting
+        // Telepad type (and the person is there to be asked: not at login).
+        move |ui: tray::Handle| {
+            shared.tray_is_up(
+                ui,
+                (first_run || blocked_at_start) && !cli.no_open && !cli.background,
+            )
+        }
     };
     let background = cli.background;
     let unavailable = {
@@ -241,6 +279,10 @@ struct Shared {
     /// The program's folder, where the page's address is left for the next start.
     config_dir: PathBuf,
     stop_server: Arc<Notify>,
+    /// Whether input is really injected, and so whether the system's permission for it matters.
+    checks_input: bool,
+    /// How asking the system for permission to type and click is going.
+    allowing: Mutex<setup::Progress>,
     serving: Mutex<Option<JoinHandle<()>>>,
     ui: Mutex<Option<tray::Handle>>,
     /// The address of the page with the QR code, if it started.
@@ -248,6 +290,8 @@ struct Shared {
     /// The page was opened already because there is no tray icon, so the first run need not open it again.
     opened_at_start: AtomicBool,
     quitting: AtomicBool,
+    /// Looks for newer versions and installs them; set as soon as this exists.
+    updater: OnceLock<Arc<Updater>>,
 }
 
 impl Shared {
@@ -282,11 +326,78 @@ impl Shared {
         }
     }
 
+    fn updater(&self) -> &Arc<Updater> {
+        self.updater.get().expect("the updater is set at the start")
+    }
+
+    /// What is in the way of typing and clicking right now, if anything.
+    fn blocked(&self) -> Option<Block> {
+        if self.checks_input {
+            access::input_blocked()
+        } else {
+            None
+        }
+    }
+
     /// What the menu says right now.
     async fn menu(&self) -> Menu {
+        let blocked = self.blocked();
         Menu {
-            status: status::describe(&self.server.status().await),
+            status: status::describe(&self.server.status().await, blocked),
             autostart: autostart::is_enabled(),
+            allow: blocked.map(|block| setup::words(block).menu),
+            update: status::update_label(&self.updater().state()),
+        }
+    }
+
+    /// Asks the system for permission to type and click. The asking waits for the person (a password prompt),
+    /// so it is done on a thread of its own; the page and the menu show how it goes.
+    fn allow(self: &Arc<Self>, open_page_if_it_fails: bool) {
+        let Some(block) = self.blocked() else {
+            return;
+        };
+        {
+            let mut allowing = self.allowing.lock().unwrap();
+            if allowing.working {
+                return;
+            }
+            *allowing = setup::Progress {
+                working: true,
+                ..Default::default()
+            };
+        }
+        let shared = Arc::clone(self);
+        let started = std::thread::Builder::new()
+            .name("telepad-allow".into())
+            .spawn(move || {
+                let outcome = access::allow(block);
+                let failed = outcome.is_err();
+                if let Err(error) = &outcome {
+                    warn!("could not get permission to type and click: {error:?}");
+                }
+                *shared.allowing.lock().unwrap() = setup::Progress::after(block, outcome);
+                shared.refresh_menu();
+                // From the menu there is nowhere to read what went wrong, so the page is opened for it.
+                if failed && open_page_if_it_fails {
+                    shared.open_page();
+                }
+            });
+        if let Err(error) = started {
+            warn!("could not start asking for permission: {error}");
+            self.allowing.lock().unwrap().working = false;
+        }
+    }
+
+    /// What the page says about permission to type and click.
+    fn setup_view(&self) -> SetupView {
+        let block = self.blocked();
+        let allowing = self.allowing.lock().unwrap().clone();
+        // How the last attempt went matters only while the permission is still missing.
+        SetupView {
+            block,
+            working: block.is_some() && allowing.working,
+            note: block.and(allowing.note),
+            terminal: block.and(allowing.terminal),
         }
     }
 
@@ -306,6 +417,15 @@ impl Shared {
     fn command(self: &Arc<Self>, command: Command) {
         match command {
             Command::Pair => self.open_page(),
+            Command::Allow => self.allow(true),
+            Command::Update => {
+                // Looking is what the item says when nothing is known; otherwise it shows what is.
+                let state = self.updater().state();
+                if state.update().is_none() && !state.is_busy() {
+                    self.updater().check();
+                }
+                self.open_page();
+            }
             Command::ToggleAutostart => {
                 let was_on = autostart::is_enabled();
                 if let Err(message) = set_autostart(!was_on) {
@@ -397,7 +517,125 @@ impl Control for Controls {
         set_autostart(on)
     }
 
+    fn setup(&self) -> SetupView {
+        self.0.setup_view()
+    }
+
+    fn update(&self) -> UpdateView {
+        let updater = self.0.updater();
+        UpdateView {
+            current: updater.current().to_string(),
+            state: updater.state(),
+            auto_check: updater.auto_check(),
+        }
+    }
+
+    fn check_for_updates(&self) {
+        self.0.updater().check();
+    }
+
+    fn install_update(&self) {
+        self.0.updater().install();
+    }
+
+    fn set_auto_update_check(&self, on: bool) -> Result<(), String> {
+        self.0.updater().set_auto_check(on)
+    }
+
+    fn allow(&self) {
+        self.0.allow(false);
+    }
+
     fn quit(&self) {
         self.0.begin_quit();
+    }
+}
+
+/// Sets up the updater: how this copy was installed decides what it can do, and where it looks is GitHub's
+/// list of this project's releases (a development build can be pointed at a server on this computer instead).
+fn make_updater(
+    config_dir: &Path,
+    quit: Weak<Shared>,
+    before_quit: impl Fn() + Send + Sync + 'static,
+) -> Arc<Updater> {
+    let commands: Arc<dyn RunCommands> = Arc::new(System);
+    let user_agent = format!("Telepad/{}", telepad_protocol::RELEASE_VERSION);
+    let (source, http) = development_source(&user_agent).unwrap_or_else(|| {
+        (
+            Source::github(),
+            Arc::new(Github::new(&user_agent)) as Arc<dyn Http>,
+        )
+    });
+    let folder = config_dir.join("updates");
+    if let Err(error) = telepad_platform::paths::ensure_private_dir(&folder) {
+        warn!("could not make the folder for updates: {error}");
+    }
+    Updater::new(UpdateConfig {
+        http,
+        kind: system::detect(&*commands),
+        commands,
+        current: telepad_protocol::RELEASE_VERSION
+            .parse::<Version>()
+            .unwrap_or_else(|_| "0.0.0".parse().expect("0.0.0 is a version")),
+        source,
+        folder,
+        autostart: Arc::new(autostart::is_enabled),
+        on_restart: Arc::new(move || {
+            before_quit();
+            if let Some(shared) = quit.upgrade() {
+                shared.begin_quit();
+            }
+        }),
+        first_look_after: FIRST_LOOK_AFTER,
+        look_every: LOOK_EVERY,
+    })
+}
+
+/// A development build can look for releases on this computer instead of on GitHub, to try the whole update
+/// from one end to the other. A release build has no such way, so no setting can send it anywhere else.
+#[cfg(debug_assertions)]
+fn development_source(user_agent: &str) -> Option<(Source, Arc<dyn Http>)> {
+    let origin = std::env::var("TELEPAD_DEV_UPDATE_ORIGIN").ok()?;
+    let source = Source::local(&origin);
+    warn!("development build: looking for updates at {origin}, not on GitHub");
+    Some((source.clone(), Arc::new(Github::local(user_agent, source))))
+}
+
+#[cfg(not(debug_assertions))]
+fn development_source(_user_agent: &str) -> Option<(Source, Arc<dyn Http>)> {
+    None
+}
+
+/// `telepad --check-update`: looks, says what it found, and exits. It installs nothing.
+fn check_update(config_dir: &Path) -> Result<(), String> {
+    let updater = make_updater(config_dir, Weak::new(), || {});
+    updater.check_blocking();
+    match updater.state() {
+        UpdateState::UpToDate => {
+            println!("Telepad {} is up to date.", updater.current());
+            Ok(())
+        }
+        UpdateState::Available(update) => {
+            println!(
+                "Telepad {} is available (this is {}): {}",
+                update.release.version,
+                updater.current(),
+                update.release.page
+            );
+            match (&update.install, &update.by_hand) {
+                (Some(_), _) => println!(
+                    "This copy can install it: choose \"Update to {}…\" in Telepad's menu.",
+                    update.release.version
+                ),
+                (None, Some(why)) => println!("{why}"),
+                (None, None) => {}
+            }
+            Ok(())
+        }
+        UpdateState::CheckFailed(why) => {
+            eprintln!("telepad: could not check for updates: {why}");
+            std::process::exit(2)
+        }
+        other => Err(format!("unexpected update state: {other:?}")),
     }
 }

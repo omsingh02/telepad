@@ -9,7 +9,9 @@
 //! * [`netif`]: enumerate local IPv4 networks for discovery.
 //! * [`paths`]: where per-user configuration lives.
 //! * [`autostart`]: starting at login.
+//! * [`access`]: whether the system lets Telepad type, and asking it to.
 
+pub mod access;
 pub mod autostart;
 pub mod backend;
 pub mod clipboard;
@@ -18,7 +20,9 @@ pub mod netif;
 mod os;
 pub mod paths;
 
-pub use backend::{InputBackend, InputCall, PlatformError, RecordingBackend, Result};
+pub use backend::{
+    DeferredInput, InputBackend, InputCall, PlatformError, RecordingBackend, Result,
+};
 
 /// How typed text reaches applications on Linux.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -50,4 +54,23 @@ pub struct BackendOptions {
 /// on Linux).
 pub fn create_input_backend(options: &BackendOptions) -> Result<Box<dyn InputBackend>> {
     os::create(options)
+}
+
+/// Like [`create_input_backend`], but a computer that has not allowed input yet does not make it fail: the
+/// backend that comes back keeps asking the system, and works as soon as the person has allowed it (see
+/// [`access`]). Anything other than "not allowed" is still an error.
+pub fn create_input_backend_when_allowed(
+    options: &BackendOptions,
+) -> Result<Box<dyn InputBackend>> {
+    let options = *options;
+    match os::create(&options) {
+        Err(error @ PlatformError::Unavailable(_)) => {
+            tracing::warn!("input is not allowed yet: {error}");
+            Ok(Box::new(DeferredInput::waiting(
+                move || os::create(&options),
+                &error,
+            )))
+        }
+        other => other,
+    }
 }

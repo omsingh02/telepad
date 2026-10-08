@@ -61,6 +61,9 @@ pub fn run(
     );
 
     let pair = MenuItem::new("Pair a phone…", true, None);
+    let update = MenuItem::new(&menu.update, true, None);
+    let allow = MenuItem::new(menu.allow.unwrap_or("Allow Telepad…"), true, None);
+    let native = NativeMenu::new();
     let autostart = CheckMenuItem::new("Start at login", true, menu.autostart, None);
     let quit = MenuItem::new("Quit Telepad", true, None);
     let status = MenuItem::new(&menu.status, false, None);
@@ -70,14 +73,22 @@ pub fn run(
     let mut unavailable = Some(unavailable);
     let mut handle = Some(handle);
     let mut menu = menu;
+    // Where the item that asks for permission goes: below the status line and its separator.
+    let allow_at = 2;
+    let mut allow_shown = false;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
             // The icon is made once the loop is running: made earlier, it may never show (macOS).
             Event::NewEvents(StartCause::Init) => {
-                match build(&menu, &status, &pair, &autostart, &quit) {
-                    Ok(built) => tray = Some(built),
+                match build(&menu, &native, &status, &pair, &update, &autostart, &quit) {
+                    Ok(built) => {
+                        tray = Some(built);
+                        if menu.allow.is_some() && native.insert(&allow, allow_at).is_ok() {
+                            allow_shown = true;
+                        }
+                    }
                     Err(reason) => {
                         if let Some(unavailable) = unavailable.take() {
                             unavailable(reason);
@@ -94,6 +105,10 @@ pub fn run(
             Event::UserEvent(Wake::Menu(event)) => {
                 if event.id == *pair.id() {
                     commands(Command::Pair);
+                } else if event.id == *allow.id() {
+                    commands(Command::Allow);
+                } else if event.id == *update.id() {
+                    commands(Command::Update);
                 } else if event.id == *autostart.id() {
                     commands(Command::ToggleAutostart);
                 } else if event.id == *quit.id() {
@@ -112,6 +127,20 @@ pub fn run(
                 if new != menu {
                     status.set_text(&new.status);
                     autostart.set_checked(new.autostart);
+                    update.set_text(&new.update);
+                    match new.allow {
+                        Some(label) => {
+                            allow.set_text(label);
+                            if !allow_shown && native.insert(&allow, allow_at).is_ok() {
+                                allow_shown = true;
+                            }
+                        }
+                        None => {
+                            if allow_shown && native.remove(&allow).is_ok() {
+                                allow_shown = false;
+                            }
+                        }
+                    }
                     if let Some(tray) = &tray {
                         let _ = tray.set_tooltip(Some(format!("Telepad: {}", new.status)));
                     }
@@ -131,17 +160,19 @@ pub fn run(
 /// Makes the icon with its menu.
 fn build(
     menu: &Menu,
+    native: &NativeMenu,
     status: &MenuItem,
     pair: &MenuItem,
+    update: &MenuItem,
     autostart: &CheckMenuItem,
     quit: &MenuItem,
 ) -> Result<TrayIcon, String> {
-    let native = NativeMenu::new();
     native
         .append_items(&[
             status,
             &PredefinedMenuItem::separator(),
             pair,
+            update,
             autostart,
             &PredefinedMenuItem::separator(),
             quit,
@@ -158,7 +189,7 @@ fn build(
         .map_err(|error| error.to_string())?;
 
     let builder = TrayIconBuilder::new()
-        .with_menu(Box::new(native))
+        .with_menu(Box::new(native.clone()))
         // A click on the icon shows the code; the menu is for the right button.
         .with_menu_on_left_click(false)
         .with_tooltip(format!("Telepad: {}", menu.status));

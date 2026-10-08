@@ -6,6 +6,7 @@
 //! turns plans into CoreGraphics calls.
 
 use super::macos_plan::{self as plan, ClickTracker, DisplayRect, KeyStep, LaunchPlan, TextAction};
+use crate::access::{AllowError, Block};
 use crate::backend::{InputBackend, PlatformError, Result};
 use crate::keymap::macos::ModifierPolicy;
 use crate::os::process::{self, Completion};
@@ -23,6 +24,31 @@ use telepad_protocol::{MediaAction, MouseButtonKind, SystemAction, VolumeDirecti
 /// never changes, and refreshing it per pointer event would be wasteful.
 const DISPLAY_CACHE_TTL: Duration = Duration::from_secs(2);
 const MAX_DISPLAYS: usize = 16;
+
+/// The list in System Settings where a program is allowed to control the computer.
+const ACCESSIBILITY_PANE: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+
+/// Whether macOS has not yet let this program post events (type and click).
+pub(crate) fn input_blocked() -> Option<Block> {
+    (!CGPreflightPostEventAccess()).then_some(Block::MacAccessibility)
+}
+
+/// Has macOS ask (it only asks the first time), then opens the list where Telepad is switched on. The person
+/// does that; [`input_blocked`] says when they have.
+pub(crate) fn allow_input() -> std::result::Result<(), AllowError> {
+    CGRequestPostEventAccess();
+    std::process::Command::new("/usr/bin/open")
+        .arg(ACCESSIBILITY_PANE)
+        .status()
+        .map_err(|error| AllowError::Failed(format!("could not open System Settings: {error}")))
+        .and_then(|status| {
+            status
+                .success()
+                .then_some(())
+                .ok_or_else(|| AllowError::Failed("System Settings did not open".to_owned()))
+        })
+}
 
 pub struct MacInput {
     policy: ModifierPolicy,

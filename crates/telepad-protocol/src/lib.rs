@@ -13,6 +13,14 @@ pub const WIRE_PAIRING_INTRO_RESP: u8 = 0xC6;
 /// it see an unexpected reply and fail the handshake at once instead of timing out.
 pub const WIRE_PAIRING_REJECTED: u8 = 0xC7;
 
+/// The release this build belongs to, such as `2.0.0-alpha.4`. The release workflow passes the whole tag as
+/// `TELEPAD_RELEASE_VERSION`; a build made any other way is the version in `Cargo.toml`, which has no pre-release
+/// part. It is what the program says it is, and what update checks compare with.
+pub const RELEASE_VERSION: &str = match option_env!("TELEPAD_RELEASE_VERSION") {
+    Some(version) if !version.is_empty() => version,
+    _ => env!("CARGO_PKG_VERSION"),
+};
+
 pub const TELEPAD_PORT: u16 = 5000;
 pub const TELEPAD_MULTICAST_GROUP: &str = "239.255.42.67";
 pub const TELEPAD_DISCOVERY_MAGIC: &[u8; 8] = &[0x54, 0xE7, 0x9A, 0x03, 0x21, 0xC8, 0xBE, 0xFE];

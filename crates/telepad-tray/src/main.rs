@@ -12,6 +12,7 @@ mod icon;
 mod instance;
 mod logging;
 mod panel;
+mod setup;
 mod status;
 mod tray;
 

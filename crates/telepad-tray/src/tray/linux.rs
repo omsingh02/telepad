@@ -51,7 +51,7 @@ impl ksni::Tray for Tray {
     }
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
-        vec![
+        let mut items: Vec<MenuItem<Self>> = vec![
             StandardItem {
                 label: self.menu.status.clone(),
                 enabled: false,
@@ -59,10 +59,31 @@ impl ksni::Tray for Tray {
             }
             .into(),
             MenuItem::Separator,
+        ];
+        // The first thing to do, while the system is not letting Telepad type.
+        if let Some(label) = self.menu.allow {
+            items.push(
+                StandardItem {
+                    label: label.into(),
+                    icon_name: "dialog-password".into(),
+                    activate: Box::new(|tray: &mut Self| tray.choose(Command::Allow)),
+                    ..Default::default()
+                }
+                .into(),
+            );
+        }
+        items.extend([
             StandardItem {
                 label: "Pair a phone…".into(),
                 icon_name: "phone".into(),
                 activate: Box::new(|tray: &mut Self| tray.choose(Command::Pair)),
+                ..Default::default()
+            }
+            .into(),
+            StandardItem {
+                label: self.menu.update.clone(),
+                icon_name: "system-software-update".into(),
+                activate: Box::new(|tray: &mut Self| tray.choose(Command::Update)),
                 ..Default::default()
             }
             .into(),
@@ -81,7 +102,8 @@ impl ksni::Tray for Tray {
                 ..Default::default()
             }
             .into(),
-        ]
+        ]);
+        items
     }
 }
 

@@ -5,6 +5,7 @@
 //! and the text console. It needs write access to `/dev/uinput`.
 
 mod actions;
+pub(crate) mod setup;
 mod uinput;
 
 use crate::backend::{InputBackend, PlatformError, Result};

@@ -15,7 +15,10 @@ ignore = []
 
 [licenses]
 # Permissive licenses, and MPL-2.0, which asks only that changes to its own files be shared (the two crates under
-# it are used unmodified). Anything else is for a person to decide on, not for a dependency update to slip in.
+# it are used unmodified). CDLA-Permissive-2.0 is a permissive license for data: it is Mozilla's list of trusted
+# certificate authorities, compiled into `webpki-roots` so that the update check can verify GitHub without relying on
+# the computer having certificates installed. Anything else is for a person to decide on, not for a dependency
+# update to slip in.
 unused-allowed-license = "allow"
 allow = [
     "MIT",
@@ -30,6 +33,7 @@ allow = [
     "BSL-1.0",
     "Unlicense",
     "MPL-2.0",
+    "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.9
 

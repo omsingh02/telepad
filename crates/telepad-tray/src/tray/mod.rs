@@ -1,7 +1,8 @@
 //! The icon in the system tray (the menu bar on a Mac) and its menu.
 //!
 //! Each system has its own way, so the interface is small and the three ways sit behind it: a status
-//! line, "Pair a phone", "Start at login" and "Quit". The rest of the program only knows [`run`].
+//! line, "Pair a phone", "Start at login" and "Quit" (and, while the system has not let Telepad type yet, a
+//! way to allow it). The rest of the program only knows [`run`].
 
 use std::sync::Arc;
 
@@ -35,6 +36,10 @@ pub enum Command {
     Pair,
     /// Turn starting at login on or off.
     ToggleAutostart,
+    /// Ask for the permission that Telepad needs to type and click.
+    Allow,
+    /// Look for a newer Telepad, or show the one that was found.
+    Update,
     Quit,
 }
 
@@ -43,6 +48,10 @@ pub enum Command {
 pub struct Menu {
     pub status: String,
     pub autostart: bool,
+    /// The words for the menu item that asks for permission to type and click, while that is what is missing.
+    pub allow: Option<&'static str>,
+    /// The words for the menu item about updates: "Check for updates…", or "Update to 2.0.1…".
+    pub update: String,
 }
 
 /// Called, from any thread, when the person chooses something.

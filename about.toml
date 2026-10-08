@@ -13,6 +13,7 @@ accepted = [
     "BSL-1.0",
     "Unlicense",
     "MPL-2.0",
+    "CDLA-Permissive-2.0",
 ]
 
 # Every platform the program is built for.
