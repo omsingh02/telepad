@@ -63,6 +63,7 @@ class WifiInputDispatcherTest {
     private fun dispatcher(
         giveUpAfterMs: Long = 600,
         monitor: () -> LivenessMonitor = { LivenessMonitor(pingIntervalMs = 40, degradedAfterMs = 150, lostAfterMs = 400) },
+        localNetworks: LocalNetworks = LocalNetworks { emptyList() },
     ) = WifiInputDispatcher(
         identity = identity,
         scope = scope,
@@ -70,6 +71,7 @@ class WifiInputDispatcherTest {
         timing = quick,
         newMonitor = monitor,
         onServerMessage = { received += it },
+        localNetworks = localNetworks,
     ).also { dispatchers += it }
 
     private fun target(server: NoiseTestServer, key: String = server.publicKeyBase64) =
@@ -137,6 +139,37 @@ class WifiInputDispatcherTest {
         val wifi = dispatcher()
         val outcome = runBlocking { wifi.connectTo(target(pc)) }
         assertEquals(WifiInputDispatcher.ConnectOutcome.Failed(FailureReason.UNREACHABLE), outcome)
+    }
+
+    @Test
+    fun `an unreachable PC on the phone's own network points at the PC's firewall`() {
+        val pc = server()
+        pc.silent = true
+        // The test PC is on the loopback network; the phone is told that it has that network too.
+        val wifi = dispatcher(localNetworks = LocalNetworks { listOf(LocalNetwork("127.0.0.2", 8)) })
+        runBlocking { wifi.connectTo(target(pc)) }
+        val state = wifi.connectionState.value as ConnectionState.Failed
+        assertEquals(NetworkHint.SameNetwork("127.0.0.1"), state.hint)
+    }
+
+    @Test
+    fun `an unreachable PC on another network is said to be on another network`() {
+        val pc = server()
+        pc.silent = true
+        val wifi = dispatcher(localNetworks = LocalNetworks { listOf(LocalNetwork("192.168.5.20", 24)) })
+        runBlocking { wifi.connectTo(target(pc)) }
+        val state = wifi.connectionState.value as ConnectionState.Failed
+        assertEquals(NetworkHint.DifferentNetwork("192.168.5.20", "127.0.0.1"), state.hint)
+    }
+
+    @Test
+    fun `only an unreachable PC gets a hint about the network`() {
+        val pc = server(allow = { false })
+        val wifi = dispatcher(localNetworks = LocalNetworks { listOf(LocalNetwork("127.0.0.2", 8)) })
+        runBlocking { wifi.connectTo(target(pc)) }
+        val state = wifi.connectionState.value as ConnectionState.Failed
+        assertEquals(FailureReason.NOT_PAIRED, state.reason)
+        assertEquals(NetworkHint.Unknown, state.hint)
     }
 
     @Test

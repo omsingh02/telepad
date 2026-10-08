@@ -79,6 +79,8 @@ class WifiInputDispatcher(
     private val newMonitor: () -> LivenessMonitor = { LivenessMonitor() },
     /** Receives everything the PC sends except host info, which is handled here. */
     private val onServerMessage: (ServerMessage) -> Unit = {},
+    /** The phone's own networks, to say whether a PC that does not answer is on the same one. */
+    private val localNetworks: LocalNetworks = SystemLocalNetworks,
 ) : InputDispatcher {
 
     /** How long to wait at each step. Tests use much shorter ones. */
@@ -396,7 +398,8 @@ class WifiInputDispatcher(
     private fun stillWanted(mine: Int) = generation.get() == mine
 
     private fun fail(w: ConnectionTarget.Wifi, reason: FailureReason) {
-        _connectionState.value = ConnectionState.Failed(w.name, ConnectionState.Transport.WIFI, reason)
+        val hint = if (reason == FailureReason.UNREACHABLE) NetworkHint.between(localNetworks.ipv4(), w.host) else NetworkHint.Unknown
+        _connectionState.value = ConnectionState.Failed(w.name, ConnectionState.Transport.WIFI, reason, hint)
     }
 
     private fun onEstablished(established: Link, mine: Int) {

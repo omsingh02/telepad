@@ -227,22 +227,15 @@ fun KeyboardTab(
                         PcClipboardCard(text, onCopy = actions::copyPcClipboardToPhone, onDismiss = actions::dismissPcClipboard)
                     }
 
-                    if (short) {
-                        // One row to slide along: there is no room for the section.
-                        Row(
-                            Modifier.horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) { for (item in shortcuts) ShortcutChip(item, haptics) }
-                    } else {
-                        SectionHeader(stringResource(R.string.keys_section_shortcuts), horizontalPadding = 0.dp)
-                        FlowRow(
-                            maxItemsInEachRow = 2,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                            // Each chip already has a 48dp touch target around its 32dp body.
-                            verticalArrangement = Arrangement.spacedBy(0.dp),
-                        ) { for (item in shortcuts) ShortcutChip(item, haptics, Modifier.weight(1f)) }
-                    }
+                    // Two columns that scroll up and down, however much room there is: with the phone's keyboard
+                    // open there is little, and with it closed a long list still fits by scrolling.
+                    SectionHeader(stringResource(R.string.keys_section_shortcuts), horizontalPadding = 0.dp)
+                    FlowRow(
+                        maxItemsInEachRow = 2,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        // Each chip already has a 48dp touch target around its 32dp body.
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
+                    ) { for (item in shortcuts) ShortcutChip(item, haptics, Modifier.weight(1f)) }
 
                     if (!state.overWifi) {
                         Text(

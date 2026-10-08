@@ -40,6 +40,8 @@ sealed interface PairingUiState {
         val label: String,
         val reason: FailureReason,
         val candidate: Candidate? = null,
+        /** What the phone's own network says about a PC that could not be reached. */
+        val hint: com.omsingh.telepad.core.wifi.NetworkHint = com.omsingh.telepad.core.wifi.NetworkHint.Unknown,
     ) : PairingUiState
 }
 

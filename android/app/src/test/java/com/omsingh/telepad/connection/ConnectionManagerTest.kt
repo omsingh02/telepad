@@ -10,6 +10,9 @@ import com.omsingh.telepad.core.trust.DeviceEntry
 import com.omsingh.telepad.core.trust.PairedDevice
 import com.omsingh.telepad.core.wifi.DiscoveredServer
 import com.omsingh.telepad.core.wifi.LanNetworks
+import com.omsingh.telepad.core.wifi.LocalNetwork
+import com.omsingh.telepad.core.wifi.LocalNetworks
+import com.omsingh.telepad.core.wifi.NetworkHint
 import com.omsingh.telepad.core.wifi.PairingInvite
 import com.omsingh.telepad.core.wifi.WifiInputDispatcher
 import com.omsingh.telepad.settings.SettingsRepository
@@ -59,11 +62,11 @@ class ConnectionManagerTest {
         build(emptyList())
     }
 
-    private fun build(initial: List<PairedDevice>) {
+    private fun build(initial: List<PairedDevice>, localNetworks: LocalNetworks = LocalNetworks { emptyList() }) {
         if (::manager.isInitialized) manager.shutdown()
         store = InMemoryTrustStore(initial)
         discovery = FakeDiscovery()
-        manager = ConnectionManager(app, store, discovery, LanNetworks(app), quick)
+        manager = ConnectionManager(app, store, discovery, LanNetworks(app), quick, localNetworks = localNetworks)
         settle()
     }
 
@@ -159,6 +162,26 @@ class ConnectionManagerTest {
         val failed = manager.pairing.value as PairingUiState.Failed
         assertEquals(FailureReason.NOT_PAIRED, failed.reason)
         assertTrue("a refused PC must not be remembered", store.all().isEmpty())
+    }
+
+    @Test
+    fun `a PC that does not answer on the phone's own network is said to be a firewall matter`() {
+        build(emptyList(), LocalNetworks { listOf(LocalNetwork("127.0.0.2", 8)) })
+        val pc = server()
+        pc.silent = true
+        manager.connectToAddress("127.0.0.1", pc.port)
+        await(what = "the failure") { manager.pairing.value is PairingUiState.Failed }
+        assertEquals(NetworkHint.SameNetwork("127.0.0.1"), (manager.pairing.value as PairingUiState.Failed).hint)
+    }
+
+    @Test
+    fun `a PC on another network is said to be on another network`() {
+        build(emptyList(), LocalNetworks { listOf(LocalNetwork("192.168.5.20", 24)) })
+        val pc = server()
+        pc.silent = true
+        manager.connectToAddress("127.0.0.1", pc.port)
+        await(what = "the failure") { manager.pairing.value is PairingUiState.Failed }
+        assertEquals(NetworkHint.DifferentNetwork("192.168.5.20", "127.0.0.1"), (manager.pairing.value as PairingUiState.Failed).hint)
     }
 
     @Test

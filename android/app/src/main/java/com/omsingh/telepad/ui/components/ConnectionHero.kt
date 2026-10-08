@@ -198,7 +198,7 @@ private fun FailureCard(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                     Text(failureTitle(state.reason, state.deviceName), style = MaterialTheme.typography.titleMedium)
                     Text(
-                        failureBody(state.reason, state.deviceName),
+                        failureBody(state.reason, state.deviceName, state.hint),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f),
                     )

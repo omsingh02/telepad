@@ -185,7 +185,7 @@ private fun Failed(state: PairingUiState.Failed, onDismiss: () -> Unit, onRetry:
         textAlign = TextAlign.Center,
     )
     Text(
-        text = if (notPaired) stringResource(R.string.pairing_not_paired_body) else failureBody(state.reason, state.label),
+        text = if (notPaired) stringResource(R.string.pairing_not_paired_body) else failureBody(state.reason, state.label, state.hint),
         style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,

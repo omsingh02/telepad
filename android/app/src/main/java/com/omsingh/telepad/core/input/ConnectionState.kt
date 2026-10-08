@@ -32,6 +32,8 @@ sealed interface ConnectionState {
         val deviceName: String?,
         val transport: Transport,
         val reason: FailureReason,
+        /** What the phone's own network says about why a PC could not be reached. */
+        val hint: com.omsingh.telepad.core.wifi.NetworkHint = com.omsingh.telepad.core.wifi.NetworkHint.Unknown,
     ) : ConnectionState
 
     enum class Transport { WIFI, BLUETOOTH }

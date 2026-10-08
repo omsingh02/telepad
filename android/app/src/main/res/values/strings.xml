@@ -80,7 +80,10 @@
 
     <!-- Why a connection failed -->
     <string name="failure_unreachable_title">Couldn’t reach %1$s</string>
-    <string name="failure_unreachable_body">Check that the PC is on, Telepad is running, and both devices are on the same network.</string>
+    <string name="failure_unreachable_body">Check that the PC is on, Telepad is running, and both devices are on the same network. If they are, the PC’s firewall may be blocking Telepad: allow UDP port 5000.</string>
+    <string name="failure_unreachable_same_network">%1$s (%2$s) is on this network, so it is probably the PC that is blocking Telepad. Allow UDP port 5000 in its firewall (a Linux firewall rule has to cover the connection the PC is using, Wi‑Fi or Ethernet), then try again.</string>
+    <string name="failure_unreachable_other_network">This phone is on %3$s, but %1$s was last at %2$s: a different network. Join the PC’s network, or scan its QR code again so that Telepad finds it.</string>
+    <string name="failure_unreachable_no_network">This phone is not on a Wi‑Fi network. Connect it to the same network as %1$s, then try again.</string>
     <string name="failure_not_paired_title">%1$s hasn’t accepted this phone</string>
     <string name="failure_not_paired_body">The PC only accepts new phones while pairing is open, or with a fresh QR code. On the PC, click the Telepad icon and choose Pair a phone, then scan the new code.</string>
     <string name="failure_key_changed_title">%1$s has changed</string>
@@ -292,6 +295,31 @@
     <string name="settings_connection_subtitle">Reconnecting and background use</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_appearance_subtitle">Theme and accent color</string>
+    <!-- Updates (Settings, About) -->
+    <string name="updates_title">Updates</string>
+    <string name="updates_check_automatically">Look for updates</string>
+    <string name="updates_check_automatically_subtitle">When the app opens, at most once a day. Telepad asks GitHub for the list of releases and sends nothing else.</string>
+    <string name="updates_check">Check now</string>
+    <string name="updates_checking">Looking for updates…</string>
+    <string name="updates_up_to_date">Telepad is up to date.</string>
+    <string name="updates_available">Telepad %1$s is available.</string>
+    <string name="updates_whats_new">What changed</string>
+    <string name="updates_install">Download and install</string>
+    <string name="updates_retry">Try again</string>
+    <string name="updates_downloading">Downloading Telepad %1$s…</string>
+    <string name="updates_downloading_percent">Downloading Telepad %1$s… %2$d%%</string>
+    <string name="updates_installing">Android is installing the update. It may ask you to confirm.</string>
+    <string name="updates_needs_permission">Android has to allow Telepad to install apps first. Allow it on the next screen, come back, and tap Download and install again.</string>
+    <string name="updates_allow">Allow installing</string>
+    <string name="updates_from_store">This copy of Telepad came from %1$s, which keeps it up to date.</string>
+    <string name="updates_development_build">This is a development build. It does not update itself.</string>
+    <string name="updates_problem_offline">Telepad could not reach GitHub. Check the internet connection.</string>
+    <string name="updates_problem_rate_limited">GitHub is limiting how often Telepad may ask. Try again in an hour.</string>
+    <string name="updates_problem_no_file">This release has no file for Android yet. Open the release page to see.</string>
+    <string name="updates_problem_checksum">The download did not match its published checksum, so it was thrown away. Try again.</string>
+    <string name="updates_problem_other">Something went wrong: %1$s</string>
+    <string name="settings_about_update_available">Update available</string>
+
     <string name="settings_privacy">Privacy and security</string>
     <string name="settings_privacy_subtitle">Paired PCs and encryption</string>
     <string name="settings_about">About</string>
@@ -376,7 +404,7 @@
     <string name="about_libraries_title">Built with</string>
     <string name="about_libraries">Telepad is built with open source libraries, such as Kotlin, Jetpack Compose, CameraX, ZXing and the Noise Protocol (noise-java). Thanks to all of their authors.</string>
     <string name="about_licenses">Open-source licenses</string>
-    <string name="about_privacy">Privacy: nothing leaves your network</string>
+    <string name="about_privacy">Privacy: what you type stays on your network</string>
 
     <!-- Onboarding -->
     <string name="onboarding_welcome_title">Your phone, your PC’s trackpad</string>

@@ -313,7 +313,7 @@ private fun NotConnected(connection: ConnectionState, onGoToDevices: () -> Unit)
             is ConnectionState.Failed -> {
                 Text(failureTitle(connection.reason, connection.deviceName), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
                 Text(
-                    failureBody(connection.reason, connection.deviceName),
+                    failureBody(connection.reason, connection.deviceName, connection.hint),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

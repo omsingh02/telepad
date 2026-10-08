@@ -32,6 +32,9 @@ import com.omsingh.telepad.core.trust.TrustDecision
 import com.omsingh.telepad.core.trust.TrustResolver
 import com.omsingh.telepad.core.wifi.DiscoveryService
 import com.omsingh.telepad.core.wifi.LanNetworks
+import com.omsingh.telepad.core.wifi.LocalNetworks
+import com.omsingh.telepad.core.wifi.NetworkHint
+import com.omsingh.telepad.core.wifi.SystemLocalNetworks
 import com.omsingh.telepad.core.wifi.PairingIntro
 import com.omsingh.telepad.core.wifi.PairingInvite
 import com.omsingh.telepad.core.wifi.ServerMessage
@@ -84,6 +87,8 @@ class ConnectionManager internal constructor(
     private val lan: LanNetworks = LanNetworks(app),
     wifiTiming: WifiInputDispatcher.Timing = WifiInputDispatcher.Timing(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+    /** The phone's own networks, to say whether a PC that does not answer is on the same one. */
+    private val localNetworks: LocalNetworks = SystemLocalNetworks,
 ) {
 
     private val settings = SettingsRepository(app)
@@ -103,6 +108,7 @@ class ConnectionManager internal constructor(
         prepareSocket = lan::bind,
         timing = wifiTiming,
         onServerMessage = { onServerMessage(it) },
+        localNetworks = localNetworks,
     )
     private val bluetooth = BluetoothInputDispatcher(hid, host = { hostProfile.value })
 
@@ -216,7 +222,7 @@ class ConnectionManager internal constructor(
                 _pairing.value = PairingUiState.Contacting(entry.name)
                 val fetched = PairingIntro.fetchPublicKey(entry.host, entry.port, prepare = lan::bind)
                 if (fetched == null) {
-                    _pairing.value = PairingUiState.Failed(entry.name, FailureReason.UNREACHABLE)
+                    _pairing.value = PairingUiState.Failed(entry.name, FailureReason.UNREACHABLE, hint = hintFor(entry.host))
                     return@launch
                 }
                 Base64.getEncoder().encodeToString(fetched)
@@ -233,7 +239,7 @@ class ConnectionManager internal constructor(
             _pairing.value = PairingUiState.Contacting(host)
             val identity = PairingIntro.identify(host, port, prepare = lan::bind)
             if (identity == null) {
-                _pairing.value = PairingUiState.Failed(host, FailureReason.UNREACHABLE)
+                _pairing.value = PairingUiState.Failed(host, FailureReason.UNREACHABLE, hint = hintFor(host))
                 return@launch
             }
             decide(identity.name ?: host, host, port, identity.publicKeyBase64, resolverName = identity.name)
@@ -259,7 +265,7 @@ class ConnectionManager internal constructor(
             _pairing.value = PairingUiState.Contacting(label)
             val reached = locate(invite)
             if (reached == null) {
-                _pairing.value = PairingUiState.Failed(label, FailureReason.UNREACHABLE)
+                _pairing.value = PairingUiState.Failed(label, FailureReason.UNREACHABLE, hint = NetworkHint.betweenAny(localNetworks.ipv4(), invite.hosts))
                 return@launch
             }
             val key = invite.publicKeyBase64
@@ -396,6 +402,9 @@ class ConnectionManager internal constructor(
         }
     }
 
+    /** What the phone's own networks say about a PC at [host] that did not answer. */
+    private fun hintFor(host: String): NetworkHint = NetworkHint.between(localNetworks.ipv4(), host)
+
     private suspend fun onWifiFailed(candidate: Candidate, reason: FailureReason) {
         when (reason) {
             FailureReason.KEY_CHANGED -> {
@@ -403,7 +412,7 @@ class ConnectionManager internal constructor(
                 // the user decide whether it is the same PC reinstalled.
                 val fresh = PairingIntro.fetchPublicKey(candidate.host, candidate.port, prepare = lan::bind)
                 if (fresh == null) {
-                    _pairing.value = PairingUiState.Failed(candidate.name, FailureReason.UNREACHABLE, candidate)
+                    _pairing.value = PairingUiState.Failed(candidate.name, FailureReason.UNREACHABLE, candidate, hintFor(candidate.host))
                 } else {
                     decide(candidate.name, candidate.host, candidate.port, Base64.getEncoder().encodeToString(fresh))
                 }
@@ -413,7 +422,10 @@ class ConnectionManager internal constructor(
             else ->
                 // The sheet is only open if the user is in the middle of pairing; otherwise
                 // the device list reports the failure through the connection state.
-                if (_pairing.value != null) _pairing.value = PairingUiState.Failed(candidate.name, reason, candidate)
+                if (_pairing.value != null) {
+                    val hint = if (reason == FailureReason.UNREACHABLE) hintFor(candidate.host) else NetworkHint.Unknown
+                    _pairing.value = PairingUiState.Failed(candidate.name, reason, candidate, hint)
+                }
         }
     }
 
