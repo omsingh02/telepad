@@ -7,8 +7,8 @@
 # It can be published to the AUR as `telepad-bin` too. scripts/update-package-manifests.sh <tag> fills in pkgver and
 # the checksum from a release (the release script runs it).
 pkgname=telepad-bin
-_tag=v2.0.0-alpha.3
-pkgver=2.0.0_alpha.3
+_tag=v2.0.0-alpha.4
+pkgver=2.0.0_alpha.4
 pkgrel=1
 pkgdesc="Use your Android phone as a trackpad, keyboard and media remote for this computer"
 arch=('x86_64')
@@ -19,7 +19,7 @@ optdepends=('gnome-shell-extension-appindicator: the tray icon on GNOME')
 provides=('telepad')
 conflicts=('telepad')
 source=("$pkgname-$pkgver.tar.gz::$url/releases/download/${_tag}/telepad-${_tag}-linux-x86_64.tar.gz")
-sha256sums=('387af7ca58d39152982ba15f3879a08ae1236414300f6b037f0062691d64c34f')
+sha256sums=('050774f29de32db63d92c8841ee8701a7ab1ea30153b9788f79658c8661ee916')
 
 package() {
   cd "telepad-${_tag}-linux-x86_64"

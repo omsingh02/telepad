@@ -1,10 +1,10 @@
 {
-    "version": "2.0.0-alpha.3",
+    "version": "2.0.0-alpha.4",
     "description": "Use your Android phone as a trackpad, keyboard and media remote for this computer",
     "homepage": "https://telepad-app.vercel.app",
     "license": "MIT",
-    "url": "https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.3/telepad-v2.0.0-alpha.3-windows-x86_64.exe#/telepad.exe",
-    "hash": "d45f44c1d353049f894fe726402203a0e99228de9df49761a0e1db78cc54b9b8",
+    "url": "https://github.com/omsingh02/telepad/releases/download/v2.0.0-alpha.4/telepad-v2.0.0-alpha.4-windows-x86_64.exe#/telepad.exe",
+    "hash": "60a6532fcfd5372ee7cf9d2f29d100a53510dac991850bd8e197dfdd1e6d4138",
     "bin": "telepad.exe",
     "shortcuts": [
         [

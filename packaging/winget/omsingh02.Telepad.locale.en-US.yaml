@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: omsingh02.Telepad
-PackageVersion: 2.0.0-alpha.3
+PackageVersion: 2.0.0-alpha.4
 PackageLocale: en-US
 Publisher: Om Singh
 PublisherUrl: https://github.com/omsingh02
@@ -21,6 +21,6 @@ Tags:
   - remote-control
   - touchpad
   - trackpad
-ReleaseNotesUrl: https://github.com/omsingh02/telepad/releases/tag/v2.0.0-alpha.3
+ReleaseNotesUrl: https://github.com/omsingh02/telepad/releases/tag/v2.0.0-alpha.4
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
