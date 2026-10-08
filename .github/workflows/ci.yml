@@ -22,8 +22,14 @@ jobs:
     outputs:
       android: ${{ steps.filter.outputs.android }}
       rust: ${{ steps.filter.outputs.rust }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # What the packaging below is told the version is: a release candidate of the code's own version, so that
+      # the apps are built the way a release builds them (with a whole version, as in 2.0.0-rc.0).
+      - name: The version to package as
+        id: version
+        run: echo "version=$(sed -nE 's/^version = "([^"]+)".*/\1/p' Cargo.toml | head -n 1)-rc.0" >> "$GITHUB_OUTPUT"
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
@@ -31,7 +37,7 @@ jobs:
             android:
               - 'android/**'
               - 'crates/telepad-protocol/**'
-              - '.github/workflows/ci.yml'
+              - '.github/workflows/**'
             rust:
               - 'crates/**'
               - 'Cargo.toml'
@@ -40,7 +46,7 @@ jobs:
               - '.cargo/**'
               - 'packaging/**'
               - 'website/install.sh'
-              - '.github/workflows/ci.yml'
+              - '.github/workflows/**'
 
   android:
     name: Android Build & Test
@@ -66,11 +72,6 @@ jobs:
       - name: Build debug APK, run unit tests and lint
         working-directory: android
         run: ./gradlew assembleDebug testDebugUnitTest lintDebug --no-daemon
-      # The release build is minified with R8, which can break things the debug build never
-      # shows. Building it here catches that before a release is tagged (it is left unsigned).
-      - name: Build minified release APK
-        working-directory: android
-        run: ./gradlew assembleRelease -x lint --no-daemon
 
   rust:
     name: Rust Workspace (${{ matrix.os }})
@@ -115,71 +116,13 @@ jobs:
         env:
           TELEPAD_RELEASE_VERSION: 2.0.0-alpha.99
         run: cargo test --workspace --locked
-      # CI is set, so on Windows a build that cannot embed the icon and version information fails.
-      - name: Build the apps (release)
-        run: cargo build --release --locked --bin telepad --bin telepad-server
 
-      # The packages are made from what was just built, the way a release makes them and installed the way a
-      # person would, so that a mistake in the packaging shows up here and not after a tag is pushed.
-      - name: Check the Linux package
-        if: runner.os == 'Linux'
-        run: |
-          desktop-file-validate packaging/linux/telepad.desktop
-          bash packaging/linux/package.sh telepad-ci-linux-x86_64 target/release/telepad "$RUNNER_TEMP/dist"
-          mkdir -p "$RUNNER_TEMP/unpacked" "$RUNNER_TEMP/home"
-          tar -xzf "$RUNNER_TEMP/dist/telepad-ci-linux-x86_64.tar.gz" -C "$RUNNER_TEMP/unpacked"
-          export HOME="$RUNNER_TEMP/home" XDG_CONFIG_HOME="$RUNNER_TEMP/home/.config"
-          "$RUNNER_TEMP/unpacked/telepad-ci-linux-x86_64/install.sh"
-          "$HOME/.local/bin/telepad" --version
-          desktop-file-validate "$HOME/.local/share/applications/telepad.desktop"
-          "$RUNNER_TEMP/unpacked/telepad-ci-linux-x86_64/install.sh" --uninstall
-          test ! -e "$HOME/.local/bin/telepad"
-
-      # The .deb, .rpm and Arch packages: built, then installed in real Debian, Ubuntu, Fedora and Arch (containers),
-      # run, and removed; and the one-line installer (website/install.sh) tried the same way.
-      - name: Check the Linux system packages
-        if: runner.os == 'Linux'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          scripts/install-nfpm.sh 2.47.0
-          export PATH="$RUNNER_TEMP/nfpm:$PATH"
-          VERSION="$(sed -nE 's/^version = "([^"]+)".*/\1/p' Cargo.toml | head -n 1)"
-          bash packaging/linux/package.sh telepad-v0.0.0-linux-x86_64 target/release/telepad "$RUNNER_TEMP/packages"
-          bash packaging/linux/build-packages.sh v0.0.0 telepad-v0.0.0-linux-x86_64 target/release/telepad "$RUNNER_TEMP/packages"
-          bash packaging/linux/tests/run.sh "$RUNNER_TEMP/packages" "$VERSION"
-          # And the one-line installer, end to end against a stand-in for GitHub serving these files as a release.
-          bash packaging/linux/tests/installer.sh "$RUNNER_TEMP/packages" v0.0.0 "$VERSION"
-
-      - name: Check the macOS package
-        if: runner.os == 'macOS'
-        run: |
-          bash packaging/macos/make-app.sh 0.0.0 target/release/telepad "$RUNNER_TEMP/app"
-          bash packaging/macos/sign-and-notarize.sh app "$RUNNER_TEMP/app/Telepad.app"
-          bash packaging/macos/make-dmg.sh telepad-ci-macos "$RUNNER_TEMP/app/Telepad.app" "$RUNNER_TEMP/dist"
-          "$RUNNER_TEMP/app/Telepad.app/Contents/MacOS/telepad" --version
-
-      - name: Check the Windows package
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $info = (Get-Item target/release/telepad.exe).VersionInfo
-          if ($info.FileDescription -ne 'Telepad') { throw "telepad.exe has no version information" }
-          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y | Out-Host }
-          $dist = Join-Path $env:RUNNER_TEMP 'dist'
-          New-Item -ItemType Directory -Force -Path $dist | Out-Null
-          & $iscc "/DVersion=0.0.0" "/DSource=$PWD\target\release\telepad.exe" "/DOutputDir=$dist" "/DOutputName=telepad-ci-setup" packaging\windows\telepad.iss
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
-
-          # Install, look, uninstall: what a person does, without the clicks.
-          $dir = Join-Path $env:LOCALAPPDATA 'Programs\Telepad'
-          Start-Process -FilePath (Join-Path $dist 'telepad-ci-setup.exe') -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=autostart' -Wait
-          if (-not (Test-Path "$dir\telepad.exe")) { throw "the installer did not install telepad.exe" }
-          $run = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').Telepad
-          if ($run -ne "`"$dir\telepad.exe`" --background") { throw "the start-at-sign-in entry is wrong: $run" }
-          Start-Process -FilePath "$dir\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
-          # The uninstaller hands over to a copy of itself and returns at once, so wait for the files to go.
-          for ($i = 0; $i -lt 60 -and (Test-Path "$dir\telepad.exe"); $i++) { Start-Sleep -Seconds 1 }
-          if (Test-Path "$dir\telepad.exe") { throw "the uninstaller did not remove telepad.exe" }
-          if ((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').Telepad) { throw "the start-at-sign-in entry was left behind" }
+  # Everything a release ships, built and tried: the same workflow the release runs, so that a release is this with a
+  # tag on it. (It builds the apps in release mode, so it is the one place that does.)
+  package:
+    name: Package
+    needs: changes
+    if: ${{ needs.changes.outputs.rust == 'true' || needs.changes.outputs.android == 'true' }}
+    uses: ./.github/workflows/package.yml
+    with:
+      version: ${{ needs.changes.outputs.version }}

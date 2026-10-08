@@ -5,10 +5,9 @@
 #   scripts/release.sh 2.1.0-alpha.1      a pre-release: the code still says 2.1.0; the build is given the whole version (2.1.0-alpha.1)
 #   scripts/release.sh 2.1.0 --dry-run    shows what it would do, changes nothing
 #   scripts/release.sh 2.1.0 --yes        does not ask (only once you have read this script)
-#   scripts/release.sh 2.1.0 --skip-checks   leaves out the local tests (CI runs them anyway)
 #
-# In order, it: checks the branch, the version numbers and the changelog; runs the tests; pushes
-# main; waits for CI; creates a signed tag and pushes it, which starts the Release workflow; waits
+# In order, it: checks the branch, the version numbers and the changelog; pushes main; waits for CI
+# (which builds and tries every package, as the release will); creates a signed tag and pushes it, which starts the Release workflow; waits
 # for that; and then checks that the download links work and that the APK is signed with the same
 # key as the previous release (a different key would stop phones from updating in place).
 #
@@ -21,12 +20,11 @@ say()  { printf '\033[36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33mwarning:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-full="" dry=0 yes=0 checks=1
+full="" dry=0 yes=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run) dry=1 ;;
     --yes|-y) yes=1 ;;
-    --skip-checks) checks=0 ;;
     -h|--help) sed -n '2,/^[^#]/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "unknown option $arg" ;;
     *) [ -z "$full" ] || die "give one version only"; full="$arg" ;;
@@ -78,29 +76,6 @@ if [[ "$heading" == *Unreleased* ]]; then
     git commit -q -m "docs: date the $version changelog"
   else
     echo "    (would set the heading to: ## [$version] - $today)"
-  fi
-fi
-
-# --- Local checks -------------------------------------------------------------------------
-if [ "$checks" = 1 ]; then
-  say "Checking the desktop server"
-  run cargo fmt --all -- --check
-  run cargo clippy --workspace --all-targets --locked -- -D warnings
-  run cargo test --workspace --locked
-  if [ -n "${ANDROID_HOME:-}${ANDROID_SDK_ROOT:-}" ] || [ -f android/local.properties ]; then
-    # Gradle 8.10 runs on Java 17 to 23. On a newer default (27, say) it stops with only "What went
-    # wrong: 27", so say what is wrong instead. CI runs the same checks, and this script waits for it.
-    java_major="$("${JAVA_HOME:+$JAVA_HOME/bin/}java" -version 2>&1 | sed -nE '1s/^[^"]*"([0-9]+).*/\1/p' || true)"
-    if [ -z "$java_major" ]; then
-      warn "no Java found (set JAVA_HOME to a JDK 17), so the Android checks are left to CI"
-    elif [ "$java_major" -lt 17 ] || [ "$java_major" -gt 23 ]; then
-      warn "the Android build cannot run on Java $java_major (Gradle 8.10 needs 17 to 23). Set JAVA_HOME to a JDK 17 to check it here; for now the Android checks are left to CI"
-    else
-      say "Checking the Android app"
-      (cd android && run ./gradlew testDebugUnitTest lintDebug)
-    fi
-  else
-    warn "no Android SDK found (set ANDROID_HOME), so the Android checks are left to CI"
   fi
 fi
 

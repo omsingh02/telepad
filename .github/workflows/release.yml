@@ -22,437 +22,68 @@ permissions:
   contents: read
 
 jobs:
-  # An APK and a server that call themselves a different version from the tag they are
-  # published under break update checks and confuse bug reports, so stop before building.
-  check-version:
-    name: Check Tag Matches Versions
+  # Stops before anything is built if the tag does not match the code, the license notice is out of date, or CI has
+  # not passed on this commit: a release is a build that has already been tried, with a tag on it.
+  check:
+    name: Check the tag
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      # The desktop programs ship with the licenses of the libraries inside them, which come from Cargo.lock.
-      - name: Install cargo-about
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: scripts/install-ci-tool.sh EmbarkStudios/cargo-about 0.9.2 cargo-about
+      - name: Compare the tag with the app and server versions
+        id: version
+        run: |
+          VERSION="${TAG#v}"
+          BASE="${VERSION%%-*}"   # a pre-release tag such as v2.1.0-rc1 releases 2.1.0
+          APP=$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)".*/\1/p' android/app/build.gradle.kts | head -n 1)
+          SERVER=$(sed -nE 's/^version = "([^"]+)".*/\1/p' Cargo.toml | head -n 1)
+          echo "Tag $TAG is version $BASE; Android app $APP; desktop server $SERVER"
+          if [ "$BASE" != "$APP" ] || [ "$BASE" != "$SERVER" ]; then
+            echo "::error::Tag $TAG is version $BASE, but the Android app is $APP and the desktop server is $SERVER. Make them match, then tag again."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      # The desktop programs ship with the licenses of the libraries inside them, which come from Cargo.lock.
+      - uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+        with:
+          tool: cargo-about@0.9.2
       - name: Check the third-party license notice is current
         run: scripts/update-licenses.sh --check
 
-      - name: Compare the tag with the app and server versions
-        run: |
-          VERSION="${TAG#v}"
-          VERSION="${VERSION%%-*}"   # a pre-release tag such as v2.1.0-rc1 releases 2.1.0
-          APP=$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)".*/\1/p' android/app/build.gradle.kts | head -n 1)
-          SERVER=$(sed -nE 's/^version = "([^"]+)".*/\1/p' Cargo.toml | head -n 1)
-          echo "Tag $TAG is version $VERSION; Android app $APP; desktop server $SERVER"
-          if [ "$VERSION" != "$APP" ] || [ "$VERSION" != "$SERVER" ]; then
-            echo "::error::Tag $TAG is version $VERSION, but the Android app is $APP and the desktop server is $SERVER. Make them match, then tag again."
-            exit 1
-          fi
-
-  build-android:
-    name: Build Android Release APK
-    needs: check-version
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
-
-      - name: Grant execute permission for gradlew
-        working-directory: android
-        run: chmod +x gradlew
-
-      - name: Prepare Keystore
-        id: keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || secrets.KEY_ALIAS || 'nwerf' }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
-        run: |
-          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
-            echo "::error::ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets are required for release builds."
-            exit 1
-          fi
-          mkdir -p android/app
-          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
-          printf "storeFile=app/release.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" \
-            "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/keystore.properties
-
-      # The app says which release it is (2.0.0-alpha.4, not only 2.0.0), and the version code goes up with each alpha.
-      - name: Tell the build which release it is
-        shell: bash
-        run: echo "TELEPAD_RELEASE_VERSION=${TAG#v}" >> "$GITHUB_ENV"
-
-      - name: Test and Build Release APK
-        working-directory: android
-        env:
-          KEYSTORE_FILE: ${{ format('{0}/android/app/release.keystore', github.workspace) }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || secrets.KEY_ALIAS || 'nwerf' }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
-        # The tests run against the debug build, as in CI: the screen tests need the test
-        # activity that Compose only adds to debug builds. The release build is still R8-minified.
-        run: ./gradlew testDebugUnitTest assembleRelease -x lint --no-daemon --stacktrace
-
-      - name: Stage APK for release
-        run: |
-          mkdir -p dist
-          APK_SRC="android/app/build/outputs/apk/release/app-release.apk"
-          if [ ! -f "$APK_SRC" ]; then
-            echo "::error::Release APK was not generated at $APK_SRC"
-            exit 1
-          fi
-          cp "$APK_SRC" "dist/telepad-android-${TAG}.apk"
-          ls -la dist
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-android
-          path: dist/*.apk
-          retention-days: 7
-
-  build-desktop-windows:
-    name: Build Windows Desktop Apps
-    needs: check-version
-    runs-on: windows-latest
-    timeout-minutes: 90
-    permissions:
-      contents: read
-    env:
-      # Signing is switched on by adding these (see docs/code-signing.md); without them the build is unsigned.
-      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-    outputs:
-      signed: ${{ steps.signed.outputs.signed }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-        with:
-          toolchain: stable
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-
-      # The apps say which release they are (2.0.0-alpha.4, not only 2.0.0), which is what update checks compare.
-      - name: Tell the build which release it is
-        shell: bash
-        run: echo "TELEPAD_RELEASE_VERSION=${TAG#v}" >> "$GITHUB_ENV"
-
-      - name: Run Cargo Tests (Release Test Gate)
-        run: cargo test --workspace --locked --verbose
-
-      # CI is set, so a build that cannot embed the icon and version information fails instead of shipping without.
-      - name: Build the apps
-        run: cargo build --release --locked --bin telepad --bin telepad-server
-
-      - name: Check the program has its icon and name
-        shell: pwsh
-        run: |
-          $info = (Get-Item target/release/telepad.exe).VersionInfo
-          Write-Host "ProductName=$($info.ProductName) FileDescription=$($info.FileDescription) Version=$($info.FileVersion)"
-          if ($info.FileDescription -ne 'Telepad') { throw "telepad.exe has no version information" }
-
-      # --- Signing the programs (only when the SignPath account is set up) -----------------------------
-      - name: Collect the programs to sign
-        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path unsigned | Out-Null
-          Copy-Item target/release/telepad.exe, target/release/telepad-server.exe unsigned/
-
-      - name: Upload the programs to sign
-        id: unsigned-programs
-        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: unsigned-windows-programs
-          path: unsigned/*.exe
-          retention-days: 1
-
-      - name: Sign the programs (SignPath)
-        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
-        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'telepad' }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
-          artifact-configuration-slug: programs
-          github-artifact-id: ${{ steps.unsigned-programs.outputs.artifact-id }}
-          wait-for-completion-timeout-in-seconds: 3600
-          output-artifact-directory: signed-programs
-
-      - name: Use the signed programs
-        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
-        shell: pwsh
-        run: Copy-Item signed-programs/*.exe target/release/ -Force
-
-      # --- The installer, from the programs above (signed or not) ---------------------------------------
-      - name: Build the installer (Inno Setup)
-        shell: pwsh
-        run: |
-          $version = ($env:TAG -replace '^v', '') -replace '-.*$', ''
-          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y | Out-Host }
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          & $iscc "/DVersion=$version" "/DSource=$PWD\target\release\telepad.exe" "/DOutputDir=$PWD\dist" "/DOutputName=telepad-$($env:TAG)-windows-x86_64-setup" packaging\windows\telepad.iss
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
-
-      - name: Upload the installer to sign
-        id: unsigned-installer
-        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: unsigned-windows-installer
-          path: dist/*-setup.exe
-          retention-days: 1
-
-      - name: Sign the installer (SignPath)
-        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
-        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'telepad' }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
-          artifact-configuration-slug: installer
-          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
-          wait-for-completion-timeout-in-seconds: 3600
-          output-artifact-directory: signed-installer
-
-      - name: Use the signed installer
-        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
-        shell: pwsh
-        run: Copy-Item signed-installer/*-setup.exe dist/ -Force
-
-      - name: Record whether this build is signed
-        id: signed
-        shell: pwsh
-        run: |
-          $signed = if ($env:SIGNPATH_API_TOKEN) { 'true' } else { 'false' }
-          "signed=$signed" >> $env:GITHUB_OUTPUT
-
-      - name: Stage Windows files
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          foreach ($exe in 'telepad.exe', 'telepad-server.exe') {
-            if (-not (Test-Path "target/release/$exe")) { throw "Windows binary not found: target/release/$exe" }
-          }
-          Copy-Item target/release/telepad.exe "dist/telepad-${env:TAG}-windows-x86_64.exe"
-          Copy-Item target/release/telepad-server.exe "dist/telepad-server-${env:TAG}-windows-x86_64.exe"
-          Compress-Archive -Path target/release/telepad-server.exe, LICENSE, THIRD_PARTY_LICENSES.md -DestinationPath "dist/telepad-server-${env:TAG}-windows-x86_64.zip" -Force
-          Get-ChildItem dist
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-windows
-          path: |
-            dist/*.exe
-            dist/*.zip
-          retention-days: 7
-
-  build-desktop-linux:
-    name: Build Linux Desktop Apps
-    needs: check-version
-    runs-on: ubuntu-22.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-        with:
-          toolchain: stable
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-
-      # The apps say which release they are (2.0.0-alpha.4, not only 2.0.0), which is what update checks compare.
-      - name: Tell the build which release it is
-        shell: bash
-        run: echo "TELEPAD_RELEASE_VERSION=${TAG#v}" >> "$GITHUB_ENV"
-
-      - name: Run Cargo Tests (Release Test Gate)
-        run: cargo test --workspace --locked --verbose
-
-      - name: Build the apps
-        run: cargo build --release --locked --bin telepad --bin telepad-server
-
-      - name: Install nfpm
+      - name: Check that CI passed on this commit
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/install-nfpm.sh 2.47.0
-
-      - name: Package
         run: |
-          mkdir -p dist
-          for bin in telepad telepad-server; do
-            if [ ! -f "target/release/$bin" ]; then
-              echo "::error::Linux binary not found at target/release/$bin"
-              exit 1
-            fi
-            chmod +x "target/release/$bin"
-          done
-          bash packaging/linux/package.sh "telepad-${TAG}-linux-x86_64" target/release/telepad dist
-          tar -czvf "dist/telepad-server-${TAG}-linux-x86_64.tar.gz" -C target/release telepad-server -C "$PWD" LICENSE THIRD_PARTY_LICENSES.md
-          # The .deb, .rpm and Arch packages, which set up the permission to type as well as installing the program.
-          bash packaging/linux/build-packages.sh "$TAG" "telepad-${TAG}-linux-x86_64" target/release/telepad dist
-          ls -la dist
-
-      # Each package is installed in a real distribution of its kind, run, and removed, before it is published.
-      - name: Try the packages in real distributions
-        run: |
-          VERSION="${TAG#v}"
-          VERSION="${VERSION%%-*}"
-          bash packaging/linux/tests/run.sh dist "$VERSION"
-
-      - name: Upload Linux artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-linux
-          path: |
-            dist/*.tar.gz
-            dist/*.deb
-            dist/*.rpm
-            dist/*.pkg.tar.zst
-          retention-days: 7
-
-  build-desktop-macos:
-    name: Build macOS Desktop Apps (universal)
-    needs: check-version
-    runs-on: macos-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    env:
-      # Signing and notarization are switched on by adding these (see docs/code-signing.md); without them the
-      # app is only ad-hoc signed and macOS asks the person to allow it.
-      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-      APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
-      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
-    outputs:
-      signed: ${{ steps.signed.outputs.signed }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-        with:
-          toolchain: stable
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-
-      # The apps say which release they are (2.0.0-alpha.4, not only 2.0.0), which is what update checks compare.
-      - name: Tell the build which release it is
-        shell: bash
-        run: echo "TELEPAD_RELEASE_VERSION=${TAG#v}" >> "$GITHUB_ENV"
-
-      - name: Run Cargo Tests (Release Test Gate)
-        run: cargo test --workspace --locked --verbose
-
-      - name: Build both architectures
-        run: |
-          for target in aarch64-apple-darwin x86_64-apple-darwin; do
-            cargo build --release --locked --bin telepad --bin telepad-server --target "$target"
-          done
-
-      - name: Create universal binaries
-        run: |
-          mkdir -p dist universal
-          for bin in telepad telepad-server; do
-            lipo -create -output "universal/$bin" \
-              "target/aarch64-apple-darwin/release/$bin" \
-              "target/x86_64-apple-darwin/release/$bin"
-            lipo -info "universal/$bin"
-            chmod +x "universal/$bin"
-          done
-          tar -czvf "dist/telepad-server-${TAG}-macos-universal.tar.gz" -C universal telepad-server -C "$PWD" LICENSE THIRD_PARTY_LICENSES.md
-
-      - name: Build the app
-        run: |
-          VERSION="${TAG#v}"
-          VERSION="${VERSION%%-*}"
-          bash packaging/macos/make-app.sh "$VERSION" universal/telepad app
-
-      # Ad hoc without the Apple credentials; with them: Developer ID, notarized and stapled.
-      - name: Sign the app
-        run: bash packaging/macos/sign-and-notarize.sh app app/Telepad.app
-
-      - name: Make the disk image
-        run: bash packaging/macos/make-dmg.sh "telepad-${TAG}-macos-universal" app/Telepad.app dist
-
-      - name: Check the disk image opens and the app in it runs
-        run: |
-          mkdir -p "$RUNNER_TEMP/dmg"
-          hdiutil attach "dist/telepad-${TAG}-macos-universal.dmg" -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg"
-          ls -la "$RUNNER_TEMP/dmg"
-          codesign --verify --strict --verbose=2 "$RUNNER_TEMP/dmg/Telepad.app"
-          "$RUNNER_TEMP/dmg/Telepad.app/Contents/MacOS/telepad" --version
-          hdiutil detach "$RUNNER_TEMP/dmg"
-
-      - name: Record whether this build is signed and notarized
-        id: signed
-        run: |
-          if [ -n "$APPLE_SIGNING_IDENTITY" ] && [ -n "$APPLE_CERTIFICATE_BASE64" ] && [ -n "$APPLE_API_KEY_BASE64" ]; then
-            echo "signed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "signed=false" >> "$GITHUB_OUTPUT"
+          SHA="$(git rev-parse HEAD)"
+          PASSED="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow CI --commit "$SHA" --status success --json databaseId --jq length)"
+          if [ "$PASSED" = 0 ]; then
+            echo "::error::CI has not passed on commit ${SHA:0:7}. Push it to main, wait for CI, then tag."
+            exit 1
           fi
 
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-macos
-          path: |
-            dist/*.dmg
-            dist/*.tar.gz
-          retention-days: 7
+  # Everything the release ships, built and tried exactly as CI builds and tries it for every change.
+  package:
+    name: Package
+    needs: check
+    uses: ./.github/workflows/package.yml
+    with:
+      version: ${{ needs.check.outputs.version }}
+      ref: ${{ inputs.tag || github.ref }}
+      signed: true
+    secrets: inherit
 
-  publish-release:
-    name: Publish Release Assets
-    needs: [build-android, build-desktop-windows, build-desktop-linux, build-desktop-macos]
+  publish:
+    name: Publish the release
+    needs: package
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -519,8 +150,8 @@ jobs:
       # of what changed.
       - name: Write the release notes
         env:
-          WINDOWS_SIGNED: ${{ needs.build-desktop-windows.outputs.signed }}
-          MACOS_SIGNED: ${{ needs.build-desktop-macos.outputs.signed }}
+          WINDOWS_SIGNED: ${{ needs.package.outputs.windows_signed }}
+          MACOS_SIGNED: ${{ needs.package.outputs.macos_signed }}
         run: |
           VERSION="${TAG#v}"
           VERSION="${VERSION%%-*}"

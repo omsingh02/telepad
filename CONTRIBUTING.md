@@ -136,10 +136,12 @@ Keep the copy honest: say only what the app and the server really do. If a claim
 
 Maintainers only. The Android app, the desktop server and the git tag all carry the same version, and the release workflow refuses to run if they differ.
 
+A release is a build that has already been tried, with a tag on it. `.github/workflows/package.yml` builds everything that ships (the phone app, the Windows program and installer, the Linux packages, the Mac app and disk image) and tries each one: installed, run and removed, in real Debian, Ubuntu, Fedora and Arch, and on the Windows and Mac runners. CI calls it for every change to the code, and the Release workflow calls the same file, so a mistake in packaging fails a pull request and not release day. Release adds only what a tag is for: it checks that the tag matches the code and that CI passed on that commit, and it publishes.
+
 ```bash
 scripts/bump-version.sh 2.1.0   # sets the version in Cargo.toml, build.gradle.kts and Cargo.lock, and starts a changelog section
 # ... write the changelog section, commit ...
-scripts/release.sh 2.1.0        # checks, pushes main, waits for CI, tags, waits for the release build, checks the downloads
+scripts/release.sh 2.1.0        # pushes main, waits for CI, tags, waits for the release, checks the downloads
 ```
 
 `release.sh` asks before each step that cannot be undone (`--dry-run` shows what it would do). The changelog section for the version must be headed `## [2.1.0] - 2026-10-31` (version and date): the release workflow publishes it as the release notes, and the script dates it for you if it still says `Unreleased`.
